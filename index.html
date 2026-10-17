@@ -1,0 +1,2721 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#bfe3ff">
+<title>鬥氣大陸：小行星漫遊</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background: #bfe3ff;
+    font-family: system-ui, -apple-system, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    touch-action: none; overscroll-behavior: none;
+    user-select: none; -webkit-user-select: none;
+  }
+  canvas#gl { position: fixed; inset: 0; display: block; z-index: 0; }
+  #rain-overlay { position: fixed; inset: 0; z-index: 15; pointer-events: none; display: none; }
+
+  #loader {
+    position: fixed; inset: 0; z-index: 200; display: flex;
+    flex-direction: column; align-items: center; justify-content: center;
+    background: linear-gradient(180deg, #bfe3ff 0%, #dff0ff 60%, #ffe9c9 100%);
+    transition: opacity .5s;
+  }
+  #loader.hide { opacity: 0; pointer-events: none; }
+  .loader-title { font-size: 34px; font-weight: 800; letter-spacing: 6px; color: #2a4a7a; }
+  .loader-sub { font-size: 15px; letter-spacing: 4px; color: #4a6a9a; margin-top: 6px; }
+  .loader-note { margin-top: 26px; font-size: 13px; color: #6a7a9a; }
+
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+    display: flex; align-items: flex-start; justify-content: space-between;
+    padding: 8px 10px; gap: 8px; pointer-events: none;
+  }
+  #topbar > * { pointer-events: auto; }
+  .hud-left { display: flex; align-items: center; gap: 8px; }
+  .avatar {
+    width: 46px; height: 46px; border-radius: 50%;
+    border: 2.5px solid #fff; background: #ffe0b3;
+    font-size: 24px; line-height: 1; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,.18); cursor: pointer; padding: 0;
+  }
+  .stats { display: flex; flex-direction: column; gap: 3px; }
+  .stat {
+    display: flex; align-items: center; gap: 4px;
+    background: rgba(255,255,255,.82); border-radius: 12px;
+    padding: 2px 9px; font-size: 13px; font-weight: 700; color: #2a3a5a;
+    box-shadow: 0 1px 5px rgba(0,0,0,.12); min-width: 66px;
+  }
+  .stat .ico { font-size: 13px; }
+  .hud-right { display: flex; gap: 5px; }
+  .topbtn {
+    position: relative;
+    width: 42px; height: 42px; min-width: 42px; border-radius: 13px;
+    border: 2px solid rgba(255,255,255,.85);
+    background: rgba(255,255,255,.78);
+    font-size: 17px; line-height: 1; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; padding: 0; color: #2a4a7a;
+    box-shadow: 0 2px 7px rgba(0,0,0,.14);
+  }
+  .topbtn:active { transform: scale(.93); }
+  .topbtn.off { opacity: .45; }
+  #compass-needle { font-size: 15px; color: #d0342c; transition: transform .08s linear; }
+  #game-time {
+    position: absolute; top: calc(100% + 3px); left: 50%; transform: translateX(-50%);
+    font-size: 10px; font-weight: 700; color: #2a4a7a; white-space: nowrap;
+    background: rgba(255,255,255,.8); padding: 1px 5px; border-radius: 6px;
+  }
+
+  #minimap {
+    position: fixed; left: 10px; top: 72px; z-index: 18;
+    width: 104px; height: 104px; border-radius: 50%;
+    box-shadow: 0 2px 10px rgba(0,0,0,.18); pointer-events: none;
+  }
+
+  #guide-banner {
+    position: fixed; left: 50%; top: 58px; transform: translateX(-50%);
+    z-index: 30; display: flex; align-items: center; gap: 10px;
+    background: linear-gradient(180deg, rgba(220,240,255,.96), rgba(180,215,255,.96));
+    border: 2px solid #7aa8d8; border-radius: 22px;
+    padding: 7px 10px 7px 16px; box-shadow: 0 4px 14px rgba(20,60,120,.25);
+    max-width: calc(100vw - 24px);
+  }
+  #guide-text {
+    font-size: 13px; font-weight: 800; color: #1a3a6a; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  #guide-cancel {
+    min-height: 32px; padding: 0 12px; border-radius: 16px;
+    border: 1.5px solid #8aa8c8; background: rgba(255,255,255,.85);
+    color: #4a5a7a; font-size: 12px; font-weight: 700; cursor: pointer;
+    font-family: inherit; white-space: nowrap;
+  }
+
+  #joystick {
+    position: fixed; left: 18px; bottom: 22px; z-index: 25;
+    width: 118px; height: 118px; border-radius: 50%;
+    background: rgba(255,255,255,.22);
+    border: 2.5px solid rgba(255,255,255,.62);
+    touch-action: none; backdrop-filter: blur(2px);
+  }
+  #joystick-knob {
+    position: absolute; left: 50%; top: 50%;
+    width: 52px; height: 52px; border-radius: 50%;
+    background: rgba(255,255,255,.9);
+    border: 2px solid rgba(160,190,230,.9);
+    transform: translate(-50%, -50%);
+    box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    pointer-events: none;
+  }
+  #btn-jump {
+    position: fixed; right: 24px; bottom: 34px; z-index: 25;
+    width: 84px; height: 84px; border-radius: 50%;
+    border: 3px solid rgba(255,255,255,.9);
+    background: radial-gradient(circle at 35% 30%, #ffe07a, #f0a830);
+    color: #5a3a10; font-size: 20px; font-weight: 800; letter-spacing: 2px;
+    cursor: pointer; padding: 0;
+    box-shadow: 0 4px 14px rgba(200,140,20,.45);
+  }
+  #btn-jump:active { transform: scale(.92); }
+  #btn-interact {
+    position: fixed; left: 50%; bottom: 168px; transform: translateX(-50%);
+    z-index: 25; padding: 12px 22px; border-radius: 24px;
+    border: 2.5px solid #fff; background: linear-gradient(180deg,#ffd75e,#f0a830);
+    color: #4a2a08; font-size: 15px; font-weight: 800; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(200,140,20,.45); white-space: nowrap; min-height: 44px;
+  }
+  #btn-interact:active { transform: translateX(-50%) scale(.95); }
+
+  .panel {
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(10,20,40,.45); padding: 18px;
+  }
+  .panel.hidden, .hidden { display: none !important; }
+  .panel-box {
+    width: 100%; max-width: 400px; max-height: 84vh; overflow-y: auto;
+    background: #fffdf6; border-radius: 18px; padding: 18px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.35);
+    border: 3px solid #e0cfae;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 18px; font-weight: 800; color: #4a3a20;
+    padding-bottom: 10px; border-bottom: 2px dashed #e0cfae; margin-bottom: 12px;
+  }
+  .panel-close {
+    width: 34px; height: 34px; border-radius: 10px; border: none;
+    background: #efe3c8; color: #6a5a3a; font-size: 17px; cursor: pointer; padding: 0;
+  }
+  .panel-body { font-size: 14px; line-height: 1.75; color: #3a3222; }
+  .panel-body h4 { margin: 14px 0 6px; font-size: 15px; color: #7a4a1a; }
+  .panel-body ul { margin: 0; padding-left: 20px; }
+  .panel-body li { margin-bottom: 5px; }
+  .panel-body code {
+    background: #f2e8d0; padding: 1px 5px; border-radius: 4px;
+    font-size: 12.5px; color: #6a4a20;
+  }
+
+  .guide-start-btn {
+    width: 100%; min-height: 46px; margin-bottom: 10px;
+    border-radius: 12px; border: 2px solid #7aa8d8;
+    background: linear-gradient(180deg,#e8f6ff,#bfe0ff);
+    color: #1a4a7a; font-weight: 800; font-size: 14px; cursor: pointer;
+    font-family: inherit; padding: 8px 12px; line-height: 1.4;
+  }
+  .guide-start-btn:active { transform: scale(.98); }
+  .guide-start-btn:disabled { opacity: .48; cursor: default; }
+  .guide-start-btn.active {
+    background: linear-gradient(180deg,#ffe8a0,#ffcf4d);
+    border-color: #d8a020; color: #6a4408;
+  }
+  .btn-progress {
+    width: 100%; min-height: 46px; margin-bottom: 12px;
+    border-radius: 12px; border: 2px solid #d8b870;
+    background: linear-gradient(180deg,#fff4dc,#ffe0a8);
+    color: #6a4408; font-weight: 800; font-size: 14px; cursor: pointer;
+    font-family: inherit; padding: 8px 12px; line-height: 1.4;
+  }
+  .btn-progress:active { transform: scale(.98); }
+
+  .quest-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 12px; border-radius: 12px; margin-bottom: 8px;
+    background: #f6efdd; border: 2px solid #eadfc4;
+  }
+  .quest-item.done { background: #e6f5e0; border-color: #b9dfa8; }
+  .quest-item.selectable { cursor: pointer; border-color: #7aa8d8; background: #eaf4ff; }
+  .quest-item.selectable:active { background: #d8eaff; }
+  .quest-dot { width: 11px; height: 11px; border-radius: 50%; background: #f0a830; flex-shrink: 0; }
+  .quest-item.done .quest-dot { background: #4aa84a; }
+  .quest-name { flex: 1; font-weight: 700; color: #4a3a20; font-size: 14px; }
+  .quest-state { font-size: 12px; color: #8a7a5a; text-align: right; }
+  .quest-item.done .quest-state { color: #3a8a3a; }
+
+  #dialog {
+    position: fixed; inset: 0; z-index: 70;
+    display: flex; align-items: flex-end; justify-content: center;
+    padding: 0 12px 26px;
+    background: rgba(10,20,40,.38);
+  }
+  .dlg-box {
+    width: 100%; max-width: 430px;
+    background: #fffdf6; border-radius: 18px; padding: 16px;
+    border: 3px solid #d8b870;
+    box-shadow: 0 10px 34px rgba(0,0,0,.4);
+    animation: dlgUp .22s ease-out;
+  }
+  @keyframes dlgUp { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .dlg-name {
+    display: inline-block; font-size: 13px; font-weight: 800; color: #fff;
+    background: linear-gradient(180deg,#c98a3a,#a86a20);
+    padding: 3px 12px; border-radius: 9px; margin-bottom: 10px;
+  }
+  .dlg-text {
+    font-size: 15px; line-height: 1.7; color: #3a3222; margin-bottom: 14px;
+    min-height: 48px; white-space: pre-line;
+  }
+  .dlg-options { display: flex; flex-direction: column; gap: 8px; }
+  .dlg-opt {
+    width: 100%; padding: 13px 14px; min-height: 46px;
+    border-radius: 12px; border: 2px solid #e0cfae; background: #f8f3e6;
+    font-size: 14px; font-weight: 700; color: #4a3a20; cursor: pointer;
+    text-align: left; font-family: inherit;
+  }
+  .dlg-opt:active { background: #ffeec2; border-color: #d8b870; }
+
+  #toast {
+    position: fixed; left: 50%; top: 128px; transform: translateX(-50%) translateY(-14px);
+    z-index: 90; background: rgba(40,30,10,.88); color: #ffe9b8;
+    padding: 10px 20px; border-radius: 22px; font-size: 14px; font-weight: 700;
+    opacity: 0; transition: all .28s; pointer-events: none; white-space: nowrap;
+    border: 1.5px solid rgba(255,220,150,.5);
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  #postcard-canvas {
+    width: 100%; border-radius: 12px; margin: 10px 0 14px;
+    border: 2px solid #e0cfae; display: block;
+  }
+  #progress-canvas {
+    width: 100%; border-radius: 12px; margin: 10px 0 8px;
+    border: 2px solid #e0cfae; display: block;
+  }
+  .btn-main {
+    width: 100%; padding: 14px; border-radius: 13px; border: none;
+    background: linear-gradient(180deg,#ffd75e,#f0a830); color: #4a2a08;
+    font-size: 16px; font-weight: 800; cursor: pointer; margin-top: 10px;
+    min-height: 48px; font-family: inherit;
+  }
+  .btn-main:active { transform: scale(.97); }
+  .btn-main.mg-btn-secondary { background: #efe3c8; color: #5a4a2a; }
+
+  .save-row { display: flex; gap: 8px; margin-top: 10px; }
+  .save-row .btn-main { margin-top: 0; flex: 1; font-size: 14px; padding: 12px 8px; }
+
+  .nick-label {
+    display: block; font-size: 13px; font-weight: 800;
+    color: #6a5a3a; margin-bottom: 4px;
+  }
+  .nick-input {
+    width: 100%; padding: 10px 12px; border-radius: 10px;
+    border: 2px solid #e0cfae; background: #fffdf6;
+    font-size: 15px; font-weight: 700; color: #4a3a20;
+    font-family: inherit; min-height: 44px;
+    outline: none;
+  }
+  .nick-input:focus { border-color: #d8b870; background: #fff7e6; }
+
+  #minigame.panel { padding: 0; background: rgba(5,10,20,.72); }
+  .mg-box {
+    width: 100%; max-width: 540px; height: 100%; max-height: 100%;
+    display: flex; flex-direction: column;
+    background: #0e1626; overflow: hidden;
+    position: relative;
+  }
+  @media (min-width: 560px) {
+    .mg-box { height: auto; max-height: 88vh; border-radius: 18px; box-shadow: 0 14px 40px rgba(0,0,0,.5); }
+  }
+  .mg-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; color: #e8f0ff; flex-shrink: 0;
+    background: rgba(20,32,54,.95);
+  }
+  #mg-title { font-size: 15px; font-weight: 800; letter-spacing: .5px; }
+  .mg-timer {
+    font-size: 16px; font-weight: 800; color: #ffe08a;
+    background: rgba(255,220,120,.12); border: 1.5px solid rgba(255,220,120,.4);
+    padding: 2px 12px; border-radius: 14px; min-width: 44px; text-align: center;
+  }
+  .mg-timer.low { color: #ff9a7a; border-color: rgba(255,140,100,.55); animation: mgPulse .8s infinite; }
+  @keyframes mgPulse { 0%,100%{opacity:1;} 50%{opacity:.55;} }
+  .mg-canvas-wrap { position: relative; flex: 1; min-height: 0; }
+  #mg-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+  #mg-status {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    font-size: 13px; font-weight: 700; color: #ffe9b8; white-space: nowrap;
+    background: rgba(20,30,50,.85); padding: 6px 16px; border-radius: 16px;
+    opacity: 0; transition: opacity .25s; pointer-events: none;
+    border: 1px solid rgba(255,220,150,.35);
+  }
+  #mg-status.show { opacity: 1; }
+  .mg-foot {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px 16px; flex-shrink: 0;
+    color: #c8d8f0; font-size: 14px; background: rgba(20,32,54,.95);
+  }
+  .mg-foot b { color: #ffe08a; font-size: 17px; }
+  .mg-result {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(5,10,20,.82); padding: 18px; z-index: 5;
+  }
+  .mg-result-box {
+    width: 100%; max-width: 320px; background: #fffdf6; border-radius: 18px;
+    padding: 20px; border: 3px solid #d8b870; text-align: center;
+    animation: dlgUp .25s ease-out;
+  }
+  .mg-result-title { font-size: 19px; font-weight: 800; color: #4a3a20; margin-bottom: 8px; }
+  .mg-result-score { font-size: 15px; color: #6a5a3a; margin-bottom: 10px; }
+  .mg-result-score b { font-size: 26px; color: #c47a1a; margin-left: 4px; }
+  .mg-result-reward {
+    font-size: 15px; font-weight: 700; color: #3a6a3a;
+    background: #eaf6e4; border-radius: 10px; padding: 8px 12px; margin-bottom: 6px;
+    line-height: 1.6;
+  }
+  .mg-result-note { font-size: 12px; color: #9a8a6a; margin-bottom: 4px; }
+
+  @media (max-width: 430px) {
+    .hud-left { gap: 5px; }
+    .avatar { width: 36px; height: 36px; font-size: 19px; }
+    .stat { font-size: 11.5px; padding: 1px 7px; min-width: 52px; gap: 2px; }
+    .stat .ico { font-size: 11.5px; }
+    .hud-right { gap: 4px; }
+    .topbtn { width: 34px; height: 34px; min-width: 34px; font-size: 14px; border-radius: 10px; }
+    #compass-needle { font-size: 12px; }
+    #game-time { font-size: 9px; padding: 1px 4px; }
+    #minimap { width: 88px; height: 88px; top: 66px; }
+  }
+  @media (max-width: 380px) {
+    .avatar { width: 32px; height: 32px; font-size: 17px; }
+    .stat { font-size: 11px; padding: 1px 6px; min-width: 46px; }
+    .topbtn { width: 30px; height: 30px; min-width: 30px; font-size: 12px; }
+    #joystick { width: 100px; height: 100px; }
+    #btn-jump { width: 72px; height: 72px; font-size: 17px; }
+  }
+  @media (max-height: 620px) {
+    #minimap { width: 84px; height: 84px; top: 66px; }
+    #joystick { width: 100px; height: 100px; }
+    #btn-jump { width: 72px; height: 72px; font-size: 17px; }
+    #guide-banner { top: 52px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="rain-overlay"></canvas>
+
+<div id="loader">
+  <div class="loader-title">鬥氣大陸</div>
+  <div class="loader-sub">小行星漫遊</div>
+  <div class="loader-note">載入中…</div>
+</div>
+
+<div id="topbar">
+  <div class="hud-left">
+    <button class="avatar" id="btn-avatar">🧑‍🦱</button>
+    <div class="stats">
+      <div class="stat"><span class="ico">🔥</span><span id="stat-fire">0</span></div>
+      <div class="stat"><span class="ico">🪙</span><span id="stat-coin">0</span></div>
+    </div>
+  </div>
+  <div class="hud-right">
+    <button class="topbtn" id="btn-compass" title="指北針">
+      <div id="compass-needle">▲</div>
+      <div id="game-time">06:00</div>
+    </button>
+    <button class="topbtn" id="btn-daynight" title="日夜切換">☀️</button>
+    <button class="topbtn" id="btn-weather" title="下雨開關">🌤️</button>
+    <button class="topbtn" id="btn-photo" title="拍照">📷</button>
+    <button class="topbtn" id="btn-music" title="音效設定">🔊</button>
+    <button class="topbtn" id="btn-quest" title="任務清單">📜</button>
+  </div>
+</div>
+
+<div id="guide-banner" class="hidden">
+  <span id="guide-text">藥老帶路中</span>
+  <button id="guide-cancel">取消</button>
+</div>
+
+<canvas id="minimap" width="220" height="220"></canvas>
+
+<div id="joystick"><div id="joystick-knob"></div></div>
+<button id="btn-jump">跳</button>
+<button id="btn-interact" class="hidden">對話</button>
+
+<div id="toast"></div>
+
+<div id="dialog" class="hidden">
+  <div class="dlg-box">
+    <div class="dlg-name" id="dlg-name">NPC</div>
+    <div class="dlg-text" id="dlg-text"></div>
+    <div class="dlg-options" id="dlg-options"></div>
+  </div>
+</div>
+
+<div id="minigame" class="panel hidden">
+  <div class="mg-box" id="mg-box">
+    <div class="mg-head">
+      <span id="mg-title">小遊戲</span>
+      <span class="mg-timer" id="mg-timer">30</span>
+    </div>
+    <div class="mg-canvas-wrap" id="mg-wrap">
+      <canvas id="mg-canvas"></canvas>
+      <div id="mg-status"></div>
+      <div id="mg-result" class="mg-result hidden">
+        <div class="mg-result-box">
+          <div class="mg-result-title" id="mg-result-title">挑戰結束</div>
+          <div class="mg-result-score">分數<b id="mg-final-score">0</b></div>
+          <div class="mg-result-reward" id="mg-reward"></div>
+          <div class="mg-result-note" id="mg-result-note"></div>
+          <button class="btn-main" id="mg-btn-replay">再玩一次</button>
+          <button class="btn-main mg-btn-secondary" id="mg-btn-close">離開</button>
+        </div>
+      </div>
+    </div>
+    <div class="mg-foot">分數 <b id="mg-score">0</b></div>
+  </div>
+</div>
+
+<div id="quest-panel" class="panel hidden">
+  <div class="panel-box">
+    <div class="panel-head">
+      <span id="quest-title">📜 任務清單</span>
+      <button class="panel-close" data-close="quest-panel">✕</button>
+    </div>
+    <button class="guide-start-btn" id="btn-guide-start">🔥 請藥老帶路（5🔥）</button>
+    <button class="btn-progress" id="btn-open-progress">🖼️ 旅程進度圖 / 明信片</button>
+    <div class="panel-body" id="quest-list"></div>
+    <div class="panel-body" style="margin-top:12px;font-size:12px;color:#8a7a5a;">
+      ※ 本作為虛構世界，地名與任務皆為遊戲化呈現，非真實地理對應。
+    </div>
+  </div>
+</div>
+
+<div id="progress-panel" class="panel hidden">
+  <div class="panel-box">
+    <div class="panel-head">
+      <span>🖼️ 旅程進度圖</span>
+      <button class="panel-close" data-close="progress-panel">✕</button>
+    </div>
+    <label class="nick-label" for="nickname-input">玩家暱稱（會顯示在進度圖與明信片上）</label>
+    <input type="text" id="nickname-input" class="nick-input" maxlength="20" placeholder="旅行者">
+    <canvas id="progress-canvas" width="600" height="880"></canvas>
+    <button class="btn-main" id="btn-download-progress">下載進度圖</button>
+    <button class="btn-main mg-btn-secondary" id="btn-download-postcard">下載電子明信片</button>
+    <div class="save-row">
+      <button class="btn-main mg-btn-secondary" id="btn-export-save">匯出存檔</button>
+      <button class="btn-main mg-btn-secondary" id="btn-import-save">匯入存檔</button>
+    </div>
+    <input type="file" id="import-file" accept="application/json,.json" class="hidden">
+    <div class="panel-body" style="margin-top:10px;font-size:12px;color:#9a8a6a;text-align:center;">
+      ※ 圖片與存檔全在瀏覽器本機生成，不會自動上傳。
+    </div>
+  </div>
+</div>
+
+<div id="help-panel" class="panel hidden">
+  <div class="panel-box">
+    <div class="panel-head">
+      <span>❔ 遊戲說明</span>
+      <button class="panel-close" data-close="help-panel">✕</button>
+    </div>
+    <div class="panel-body">
+      <h4>操作</h4>
+      <ul>
+        <li>手機：左下搖桿移動，右下「跳」按鈕跳躍。</li>
+        <li>電腦：WASD 移動，空白鍵跳躍。</li>
+        <li>靠近地標後，點擊畫面下方的「對話」按鈕接任務。</li>
+      </ul>
+      <h4>五個地標小遊戲</h4>
+      <ul>
+        <li>烏坦城：三年之約·鬥氣凝聚（點擊光點）</li>
+        <li>魔獸山脈：採藥人的警覺（採藥避獸）</li>
+        <li>塔戈爾沙漠：青蓮地心火·蛇巢奪火（時機潛行）</li>
+        <li>迦南學院：天焚煉氣塔·心火淬鍊（節奏點擊）</li>
+        <li>丹塔：丹會·靈魂力考核（三階段）</li>
+      </ul>
+      <h4>日夜與天氣</h4>
+      <ul>
+        <li>遊戲時間每秒走 1 分鐘，頂部指北針下方顯示目前時間。</li>
+        <li>點日夜按鈕可把時間切到白天（07:00）或夜晚（21:00）。</li>
+        <li>黎明與黃昏天空轉橘，夜晚深藍；夜市攤位只在夜晚出現。</li>
+        <li>點天氣按鈕可切換下雨，不影響效能與操作。</li>
+      </ul>
+      <h4>藥老帶路</h4>
+      <ul>
+        <li>任務清單上方按鈕，花 5 個 🔥 請藥老帶路。</li>
+        <li>選定未完成地標後，藥老會飄在前方，地上出現閃亮指引點。</li>
+        <li>到達自動結束。<b>取消或中途放棄都不退還 🔥。</b></li>
+      </ul>
+      <h4>存檔與分享</h4>
+      <ul>
+        <li>進度自動存在瀏覽器 localStorage，不需登入、不上傳。</li>
+        <li>存檔含版本號與 <code>playerId</code>，之後接後端可直接沿用。</li>
+        <li>進度圖面板可「匯出存檔」成 JSON 備份，或「匯入存檔」還原。</li>
+        <li>匯入會完全覆蓋目前進度，請先匯出備份。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div id="finish-panel" class="panel hidden">
+  <div class="panel-box">
+    <div class="panel-head">
+      <span>🏆 旅程完成</span>
+      <button class="panel-close" data-close="finish-panel">✕</button>
+    </div>
+    <div class="panel-body">
+      <p style="margin:0 0 6px;">恭喜你走完鬥氣大陸的一圈。</p>
+      <canvas id="postcard-canvas" width="720" height="900"></canvas>
+      <button class="btn-main" id="btn-download-card">下載明信片</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+'use strict';
+
+/* =========================================================================
+   1. 世界資料表（虛構世界，非真實地理，無 OSM 對應）
+   ========================================================================= */
+const GUIDE_NAME = '藥老';
+
+const WORLD = {
+  name: '鬥氣大陸',
+  radius: 90,
+  landmarks: [
+    {
+      id: 'wutan', name: '烏坦城', lat: 15, lon: -120,
+      type: 'minigame', npc: '蕭家老管事', npcColor: 0x8b6f47,
+      opening: '這裡是烏坦城，蕭家的地盤。當年那句「莫欺少年窮」，就是在這兒喊出來的。想試試自己的鬥氣嗎？'
+    },
+    {
+      id: 'beast', name: '魔獸山脈', lat: 38, lon: -48,
+      type: 'minigame', npc: '山道採藥人', npcColor: 0x4a7a4a,
+      opening: '這山脈裡魔獸橫行，採藥得眼明手快。你要不要試著在這兒走一趟？'
+    },
+    {
+      id: 'desert', name: '塔戈爾沙漠', lat: -5, lon: 24,
+      type: 'minigame', npc: '蛇人族守衛', npcColor: 0xb08a5a,
+      opening: '人類，這裡是蛇人族的領地。沙漠深處有異火，也有守衛。你要有本事，就去取來看看。'
+    },
+    {
+      id: 'academy', name: '迦南學院', lat: 25, lon: 96,
+      type: 'minigame', npc: '學院導師', npcColor: 0x4a5a9a,
+      opening: '歡迎來到迦南學院。天焚煉氣塔的心火能淬鍊鬥氣，節奏抓得準，事半功倍。'
+    },
+    {
+      id: 'danta', name: '丹塔', lat: 5, lon: 168,
+      type: 'minigame', npc: '丹塔執事', npcColor: 0x9a4a4a,
+      opening: '丹塔重地。丹會考核分靈魂力強度、控制與碰撞三項，你若有意，便來試試。'
+    }
+  ],
+  easterEggs: ['雲嵐宗', '鹽城', '加瑪帝都', '出雲帝國', '黑之城', '星隕閣', '獸域', '古族', '魂殿', '陀舍古帝洞府']
+};
+
+/* =========================================================================
+   2. 存檔層（單機版，已整理成之後可接後端的形狀）
+   ========================================================================= */
+const SAVE_KEY = 'douqi-planet-v1';
+const SAVE_VERSION = 2;
+
+const DEFAULT_SAVE = {
+  version: SAVE_VERSION,
+  playerId: '',
+  nickname: '旅行者',
+  fire: 0,
+  coin: 0,
+  completed: [],
+  sound: true,
+  rain: false,
+  updatedAt: 0
+};
+
+const save = Object.assign({}, DEFAULT_SAVE);
+
+function genPlayerId() {
+  return 'p-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+/* 舊存檔 → 新結構。目前 v1 只補 version / playerId / updatedAt。 */
+function migrateSave(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const out = Object.assign({}, DEFAULT_SAVE);
+  if (typeof raw.nickname === 'string') out.nickname = raw.nickname.slice(0, 20) || '旅行者';
+  if (typeof raw.fire === 'number' && isFinite(raw.fire)) out.fire = Math.max(0, Math.floor(raw.fire));
+  if (typeof raw.coin === 'number' && isFinite(raw.coin)) out.coin = Math.max(0, Math.floor(raw.coin));
+  if (Array.isArray(raw.completed)) {
+    out.completed = raw.completed.filter(function (id) {
+      return typeof id === 'string' && WORLD.landmarks.some(function (lm) { return lm.id === id; });
+    });
+  }
+  if (typeof raw.sound === 'boolean') out.sound = raw.sound;
+  if (typeof raw.rain === 'boolean') out.rain = raw.rain;
+  if (typeof raw.playerId === 'string' && raw.playerId) out.playerId = raw.playerId;
+  if (typeof raw.updatedAt === 'number' && isFinite(raw.updatedAt)) out.updatedAt = raw.updatedAt;
+  out.version = SAVE_VERSION;
+  return out;
+}
+
+function loadSave() {
+  let loaded = null;
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (raw) loaded = migrateSave(JSON.parse(raw));
+  } catch (e) { loaded = null; }
+  if (loaded) Object.assign(save, loaded);
+  if (!save.playerId) save.playerId = genPlayerId();
+  if (!save.updatedAt) save.updatedAt = Date.now();
+  persist();
+}
+
+function persist() {
+  save.updatedAt = Date.now();
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  } catch (e) { /* ignore */ }
+  SyncAdapter.push(save);
+}
+
+/* 之後接後端時，替換這個物件即可，其餘程式不動。
+   pull()  : 回傳遠端存檔，或 null 表示沒有
+   push()  : 上傳目前存檔，回傳是否成功
+   signIn(): 暱稱登入或匿名登入，回傳 playerId */
+const SyncAdapter = {
+  mode: 'local',
+  async pull() { return null; },
+  async push(_s) { return true; },
+  async signIn(_nickname) { return save.playerId; }
+};
+
+/* =========================================================================
+   3. Three.js 基礎
+   ========================================================================= */
+const R = WORLD.radius;
+const UP = new THREE.Vector3(0, 1, 0);
+
+let scene, camera, renderer;
+let hemiLight, dirLight, ambientLight;
+let playerGroup;
+const landmarks = [];
+const flames = [];
+const nightMarkets = [];
+
+const player = {
+  pos: new THREE.Vector3(-R, 0, 0),
+  forward: new THREE.Vector3(0, 0, 1),
+  jumpH: 0, jumpVel: 0, onGround: true, speed: 21
+};
+
+const keys = {};
+let joyVec = { x: 0, y: 0 };
+let gameMinutes = 6 * 60;
+let isNight = false;
+let lastNightState = null;
+let photoRequested = false;
+let nearLandmark = null;
+
+const _matCache = new Map();
+function toonMat(color) {
+  if (!_matCache.has(color)) _matCache.set(color, new THREE.MeshToonMaterial({ color }));
+  return _matCache.get(color);
+}
+const outlineMaterial = new THREE.MeshBasicMaterial({ color: 0x22301f, side: THREE.BackSide });
+function addOutlineTo(mesh, scale) {
+  const s = scale || 1.07;
+  const o = new THREE.Mesh(mesh.geometry, outlineMaterial);
+  o.scale.setScalar(s);
+  mesh.add(o);
+  return o;
+}
+function addMesh(parent, geo, color, x, y, z, outline) {
+  const m = new THREE.Mesh(geo, toonMat(color));
+  m.position.set(x || 0, y || 0, z || 0);
+  if (outline !== false) addOutlineTo(m);
+  parent.add(m);
+  return m;
+}
+function latLonToVec3(lat, lon, radius) {
+  const phi = (90 - lat) * Math.PI / 180;
+  const theta = (lon + 180) * Math.PI / 180;
+  return new THREE.Vector3(
+    -radius * Math.sin(phi) * Math.cos(theta),
+     radius * Math.cos(phi),
+     radius * Math.sin(phi) * Math.sin(theta)
+  );
+}
+
+/* =========================================================================
+   4. 音效
+   ========================================================================= */
+let audioCtx = null;
+function initAudio() {
+  if (audioCtx) return;
+  try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+  catch (e) { audioCtx = null; }
+}
+function playTone(freq, dur, type, vol) {
+  if (!save.sound || !audioCtx) return;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type || 'sine';
+  o.frequency.value = freq;
+  const t = audioCtx.currentTime;
+  g.gain.setValueAtTime(vol || 0.12, t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function sfxJump() { playTone(520, 0.11, 'square', 0.06); }
+function sfxPick() { playTone(880, 0.09, 'sine', 0.1); setTimeout(function(){ playTone(1320, 0.11, 'sine', 0.08); }, 70); }
+function sfxDone() {
+  playTone(660, 0.13, 'sine', 0.11);
+  setTimeout(function(){ playTone(880, 0.13, 'sine', 0.11); }, 120);
+  setTimeout(function(){ playTone(1100, 0.22, 'sine', 0.1); }, 250);
+}
+function sfxGuide() { playTone(392, 0.16, 'sine', 0.09); setTimeout(function(){ playTone(587, 0.22, 'sine', 0.08); }, 140); }
+function sfxHit() { playTone(740, 0.07, 'triangle', 0.09); }
+function sfxMiss() { playTone(180, 0.16, 'sawtooth', 0.06); }
+
+/* =========================================================================
+   5. 建立世界
+   ========================================================================= */
+function initScene() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xbfe3ff);
+  scene.fog = new THREE.Fog(0xbfe3ff, 320, 860);
+
+  camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.5, 3000);
+  camera.position.set(-R - 26, 20, 0);
+  camera.up.copy(new THREE.Vector3(-1, 0, 0));
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.domElement.id = 'gl';
+  document.body.appendChild(renderer.domElement);
+
+  hemiLight = new THREE.HemisphereLight(0xffffff, 0x88aacc, 0.95);
+  scene.add(hemiLight);
+  ambientLight = new THREE.AmbientLight(0xffffff, 0.42);
+  scene.add(ambientLight);
+  dirLight = new THREE.DirectionalLight(0xffffff, 1.05);
+  dirLight.position.set(120, 200, 90);
+  scene.add(dirLight);
+
+  createPlanet();
+  createDecor();
+  WORLD.landmarks.forEach(createLandmark);
+  createFlames();
+  playerGroup = createPlayerModel();
+  landmarks.forEach(createNightMarketFor);
+  applySky(6);
+}
+
+function createPlanet() {
+  const geo = new THREE.IcosahedronGeometry(R, 3);
+  const posAttr = geo.attributes.position;
+  const colors = [];
+  const c = new THREE.Color();
+  for (let i = 0; i < posAttr.count; i++) {
+    const v = new THREE.Vector3().fromBufferAttribute(posAttr, i);
+    const n = Math.sin(v.x * 0.055) * Math.cos(v.z * 0.062) + Math.sin(v.y * 0.071) * 0.65;
+    c.setHSL(0.275 + n * 0.018, 0.40, 0.52 + n * 0.065);
+    colors.push(c.r, c.g, c.b);
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+  const planet = new THREE.Mesh(geo, new THREE.MeshToonMaterial({ vertexColors: true }));
+  scene.add(planet);
+
+  const outline = new THREE.Mesh(geo.clone(), new THREE.MeshBasicMaterial({
+    color: 0x2c3d28, side: THREE.BackSide
+  }));
+  outline.scale.setScalar(1.013);
+  scene.add(outline);
+}
+
+function randomSphereNormal() {
+  const u = Math.random() * 2 - 1;
+  const t = Math.random() * Math.PI * 2;
+  const s = Math.sqrt(1 - u * u);
+  return new THREE.Vector3(s * Math.cos(t), u, s * Math.sin(t)).normalize();
+}
+function tooCloseToLandmark(n, minAngle) {
+  for (let i = 0; i < WORLD.landmarks.length; i++) {
+    const lm = WORLD.landmarks[i];
+    const v = latLonToVec3(lm.lat, lm.lon, 1).normalize();
+    if (Math.acos(THREE.MathUtils.clamp(v.dot(n), -1, 1)) < minAngle) return true;
+  }
+  return false;
+}
+function createDecor() {
+  for (let i = 0; i < 16; i++) {
+    const n = randomSphereNormal();
+    if (tooCloseToLandmark(n, 0.19)) continue;
+    const g = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.38, 1.8, 6), toonMat(0x7a5432));
+    trunk.position.y = 0.9; addOutlineTo(trunk, 1.09); g.add(trunk);
+    const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 0), toonMat(0x3f8a3a));
+    leaf.position.y = 2.6; leaf.scale.set(1, 1.15, 1); addOutlineTo(leaf, 1.08); g.add(leaf);
+    g.position.copy(n.clone().multiplyScalar(R));
+    g.quaternion.setFromUnitVectors(UP, n);
+    g.rotation.y = Math.random() * Math.PI * 2;
+    scene.add(g);
+  }
+  for (let i = 0; i < 12; i++) {
+    const n = randomSphereNormal();
+    if (tooCloseToLandmark(n, 0.15)) continue;
+    const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(0.9 + Math.random() * 0.9, 0), toonMat(0x8f9088));
+    rock.position.copy(n.clone().multiplyScalar(R + 0.35));
+    rock.quaternion.setFromUnitVectors(UP, n);
+    rock.rotation.y = Math.random() * Math.PI;
+    addOutlineTo(rock, 1.1);
+    scene.add(rock);
+  }
+}
+
+/* =========================================================================
+   6. 地標
+   ========================================================================= */
+function createLandmark(def) {
+  const normal = latLonToVec3(def.lat, def.lon, 1).normalize();
+  const pos = normal.clone().multiplyScalar(R);
+
+  const group = new THREE.Group();
+  group.position.copy(pos);
+  group.quaternion.setFromUnitVectors(UP, normal);
+  scene.add(group);
+
+  const builders = { wutan: buildWutan, beast: buildBeast, desert: buildDesert, academy: buildAcademy, danta: buildDanta };
+  builders[def.id](group);
+
+  const sign = makeSign(def.name);
+  sign.position.set(0, 9.5, 7.5);
+  sign.rotation.y = 0.15;
+  group.add(sign);
+
+  const npc = createNPCModel(def.npcColor);
+  npc.position.set(5.2, 0, 6.2);
+  npc.lookAt(new THREE.Vector3(0, 1.4, 0));
+  group.add(npc);
+
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(11.5, 13, 32),
+    new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.45, side: THREE.DoubleSide })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.12;
+  group.add(ring);
+
+  landmarks.push({ def: def, group: group, pos: pos, normal: normal, ring: ring });
+}
+
+function buildWutan(g) {
+  addMesh(g, new THREE.CylinderGeometry(11, 11.6, 1.2, 12), 0xa8996f, 0, 0.6, 0);
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2 + 0.26;
+    const w = new THREE.Mesh(new THREE.BoxGeometry(6.2, 3.4, 1.1), toonMat(0xc9b795));
+    w.position.set(Math.cos(a) * 8, 2.9, Math.sin(a) * 8);
+    w.rotation.y = -a; addOutlineTo(w); g.add(w);
+  }
+  addMesh(g, new THREE.BoxGeometry(5.4, 6.4, 5.4), 0xd6c6a2, 0, 4.4, 0);
+  const roof = addMesh(g, new THREE.ConeGeometry(4.6, 3.4, 4), 0xa03a34, 0, 9.2, 0);
+  roof.rotation.y = Math.PI / 4;
+  addMesh(g, new THREE.BoxGeometry(2.6, 3, 2.6), 0xc9b795, -5.5, 2.7, -2.5);
+  addMesh(g, new THREE.ConeGeometry(2.2, 1.8, 4), 0xa03a34, -5.5, 5.1, -2.5).rotation.y = Math.PI / 4;
+  addMesh(g, new THREE.BoxGeometry(2.2, 2.6, 2.2), 0xc9b795, 5.8, 2.5, -3.4);
+  addMesh(g, new THREE.ConeGeometry(1.9, 1.6, 4), 0xa03a34, 5.8, 4.6, -3.4).rotation.y = Math.PI / 4;
+}
+function buildBeast(g) {
+  addMesh(g, new THREE.CylinderGeometry(11, 12, 1.4, 9), 0x5d7a4a, 0, 0.7, 0);
+  addMesh(g, new THREE.ConeGeometry(4.6, 12, 5), 0x8a8f92, -3.5, 7.2, -1.5);
+  addMesh(g, new THREE.ConeGeometry(3.4, 8.5, 5), 0x7a8084, 3.2, 5.4, -2.6);
+  addMesh(g, new THREE.ConeGeometry(2.6, 6.5, 5), 0x999ea1, 1.0, 4.4, 3.4);
+  for (let i = 0; i < 5; i++) {
+    const a = i / 5 * Math.PI * 2 + 0.5;
+    const x = Math.cos(a) * 7.2, z = Math.sin(a) * 7.2;
+    addMesh(g, new THREE.CylinderGeometry(0.24, 0.3, 1.6, 5), 0x6a4a2a, x, 0.8, z, false);
+    addMesh(g, new THREE.IcosahedronGeometry(1.25, 0), 0x3f7a36, x, 2.3, z);
+  }
+}
+function buildDesert(g) {
+  addMesh(g, new THREE.CylinderGeometry(11, 11.6, 1.2, 10), 0xe0c890, 0, 0.6, 0);
+  for (let i = 0; i < 3; i++) {
+    const a = i / 3 * Math.PI * 2 + 0.6;
+    const dune = addMesh(g, new THREE.SphereGeometry(4.2, 10, 8), 0xe8d3a0, Math.cos(a) * 5.5, 0.3, Math.sin(a) * 5.5, false);
+    dune.scale.set(1.3, 0.42, 1.3);
+  }
+  addMesh(g, new THREE.CylinderGeometry(0.9, 1.15, 9, 6), 0xbfa070, 0, 5.4, 0);
+  addMesh(g, new THREE.SphereGeometry(1.5, 10, 8), 0xd8b060, 0, 10.6, 0);
+  addMesh(g, new THREE.ConeGeometry(0.8, 1.6, 5), 0xc08040, 0, 12.2, 0);
+  for (let i = 0; i < 4; i++) {
+    const a = i / 4 * Math.PI * 2 + 0.3;
+    addMesh(g, new THREE.CylinderGeometry(0.42, 0.42, 3.6, 6), 0xa08858, Math.cos(a) * 8, 1.8, Math.sin(a) * 8);
+  }
+}
+function buildAcademy(g) {
+  addMesh(g, new THREE.CylinderGeometry(11, 11.6, 1.2, 8), 0xa8a89a, 0, 0.6, 0);
+  addMesh(g, new THREE.BoxGeometry(9.5, 5.5, 7), 0xd8d4c4, 0, 4, 0);
+  addMesh(g, new THREE.BoxGeometry(9.8, 1.1, 7.3), 0x7a6a4a, 0, 7.3, 0);
+  addMesh(g, new THREE.CylinderGeometry(1.9, 2.5, 13, 8), 0xe0dccc, -4.6, 7.6, -3);
+  addMesh(g, new THREE.ConeGeometry(2.6, 3.4, 8), 0x4a6aa8, -4.6, 15.8, -3);
+  addMesh(g, new THREE.CylinderGeometry(1.6, 2.1, 10, 8), 0xe0dccc, 4.8, 6.1, -2.6);
+  addMesh(g, new THREE.ConeGeometry(2.2, 2.8, 8), 0x4a6aa8, 4.8, 12.6, -2.6);
+  for (let i = 0; i < 4; i++) {
+    addMesh(g, new THREE.CylinderGeometry(0.55, 0.55, 4.4, 8), 0xf2efe6, -3 + i * 2, 2.2, 4.2);
+  }
+}
+function buildDanta(g) {
+  addMesh(g, new THREE.CylinderGeometry(10, 10.8, 1.2, 8), 0x8a7a6a, 0, 0.6, 0);
+  addMesh(g, new THREE.CylinderGeometry(2.8, 4.2, 14, 8), 0xc44a3a, 0, 8, 0);
+  addMesh(g, new THREE.CylinderGeometry(3.4, 3.0, 1.4, 8), 0xe8d8b0, 0, 15.6, 0);
+  addMesh(g, new THREE.CylinderGeometry(3.9, 3.9, 2.4, 8), 0x8a5a2a, 0, 17.4, 0);
+  addMesh(g, new THREE.TorusGeometry(3.6, 0.38, 6, 14), 0xd8b040, 0, 18.8, 0).rotation.x = Math.PI / 2;
+  const flameBall = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 0), new THREE.MeshBasicMaterial({ color: 0xffa030 }));
+  flameBall.position.set(0, 21.2, 0); g.add(flameBall);
+  for (let i = 0; i < 4; i++) {
+    const a = i / 4 * Math.PI * 2 + 0.4;
+    addMesh(g, new THREE.CylinderGeometry(0.8, 1.0, 6.5, 6), 0xb8503f, Math.cos(a) * 7.4, 3.4, Math.sin(a) * 7.4);
+    addMesh(g, new THREE.SphereGeometry(1.1, 8, 6), 0xe8d8b0, Math.cos(a) * 7.4, 7.2, Math.sin(a) * 7.4);
+  }
+}
+
+function makeSignTexture(text) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#3d2a17'; ctx.fillRect(0, 0, 512, 128);
+  ctx.strokeStyle = '#d9b26a'; ctx.lineWidth = 7; ctx.strokeRect(8, 8, 496, 112);
+  ctx.fillStyle = '#f5e6c8';
+  ctx.font = 'bold 62px "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, 256, 70);
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 4;
+  return tex;
+}
+function makeSign(text) {
+  const g = new THREE.Group();
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 5.5, 6), toonMat(0x6b4a2f));
+  post.position.y = -2.8; addOutlineTo(post, 1.1); g.add(post);
+  const board = new THREE.Mesh(
+    new THREE.PlaneGeometry(8.4, 2.1),
+    new THREE.MeshBasicMaterial({ map: makeSignTexture(text), side: THREE.DoubleSide })
+  );
+  g.add(board);
+  return g;
+}
+function createNPCModel(color) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.85, 1.9, 8), toonMat(color));
+  body.position.y = 1.0; addOutlineTo(body); g.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.62, 10, 8), toonMat(0xf0c9a0));
+  head.position.y = 2.4; addOutlineTo(head); g.add(head);
+  const hat = new THREE.Mesh(new THREE.ConeGeometry(0.9, 0.9, 8), toonMat(0x4a3a2a));
+  hat.position.y = 3.0; addOutlineTo(hat); g.add(hat);
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0x2a2a2a });
+  const e1 = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6), eyeMat);
+  e1.position.set(-0.2, 2.45, 0.55); g.add(e1);
+  const e2 = e1.clone(); e2.position.x = 0.2; g.add(e2);
+  return g;
+}
+
+/* =========================================================================
+   7. 夜市攤位（夜晚限定）
+   ========================================================================= */
+function createNightMarketFor(lm) {
+  const group = new THREE.Group();
+  group.position.copy(lm.pos);
+  group.quaternion.setFromUnitVectors(UP, lm.normal);
+
+  [{ a: 0.55, d: 17.5 }, { a: 1.25, d: 18.5 }, { a: 2.05, d: 17.0 }].forEach(function (p, i) {
+    const stall = new THREE.Group();
+    stall.position.set(Math.cos(p.a) * p.d, 0, Math.sin(p.a) * p.d);
+    stall.rotation.y = -p.a;
+
+    const poleMat = toonMat(0x6a4a2a);
+    [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]].forEach(function (q) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 2.2, 6), poleMat);
+      pole.position.set(q[0], 1.1, q[1]);
+      addOutlineTo(pole, 1.1);
+      stall.add(pole);
+    });
+
+    const canopy = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.22, 3.4), toonMat(i % 2 === 0 ? 0xc84a3a : 0x3a6ac8));
+    canopy.position.y = 2.3; addOutlineTo(canopy, 1.06); stall.add(canopy);
+
+    const table = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.65, 1.4), toonMat(0xd8b878));
+    table.position.set(0, 0.85, 0); addOutlineTo(table, 1.06); stall.add(table);
+
+    const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.45, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffd45a }));
+    lantern.position.set(0, 1.85, 0); stall.add(lantern);
+
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(1.1, 10, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffd45a, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending }));
+    halo.position.copy(lantern.position); stall.add(halo);
+
+    stall.userData.halo = halo;
+    stall.userData.lantern = lantern;
+    stall.userData.phase = Math.random() * Math.PI * 2;
+    group.add(stall);
+  });
+
+  group.visible = false;
+  scene.add(group);
+  nightMarkets.push({ group: group });
+}
+function updateNightMarkets(night) {
+  for (let i = 0; i < nightMarkets.length; i++) nightMarkets[i].group.visible = night;
+}
+function animateNightMarkets(t) {
+  for (let i = 0; i < nightMarkets.length; i++) {
+    const g = nightMarkets[i].group;
+    if (!g.visible) continue;
+    for (let k = 0; k < g.children.length; k++) {
+      const stall = g.children[k];
+      if (!stall.userData.halo) continue;
+      const ph = stall.userData.phase;
+      stall.userData.halo.scale.setScalar(1 + Math.sin(t * 2.6 + ph) * 0.16);
+      stall.userData.lantern.scale.setScalar(1 + Math.sin(t * 3.4 + ph) * 0.06);
+    }
+  }
+}
+
+/* =========================================================================
+   8. 玩家
+   ========================================================================= */
+function createPlayerModel() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.86, 1.7, 8), toonMat(0x3a6ac8));
+  body.position.y = 1.05; addOutlineTo(body); g.add(body);
+  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.24, 8), toonMat(0xd8a838));
+  belt.position.y = 1.75; addOutlineTo(belt, 1.05); g.add(belt);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.72, 12, 10), toonMat(0xf5d2ad));
+  head.position.y = 2.5; addOutlineTo(head); g.add(head);
+  const hair = new THREE.Mesh(
+    new THREE.SphereGeometry(0.76, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.56), toonMat(0x24211f));
+  hair.position.y = 2.58; addOutlineTo(hair, 1.05); g.add(hair);
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
+  const e1 = new THREE.Mesh(new THREE.SphereGeometry(0.095, 6, 6), eyeMat);
+  e1.position.set(-0.24, 2.52, 0.63); g.add(e1);
+  const e2 = e1.clone(); e2.position.x = 0.24; g.add(e2);
+  const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 1.1, 6), toonMat(0xf5d2ad));
+  armL.position.set(-0.82, 1.15, 0); armL.rotation.z = 0.22; addOutlineTo(armL, 1.12); g.add(armL);
+  const armR = armL.clone(); armR.position.x = 0.82; armR.rotation.z = -0.22; g.add(armR);
+  g.userData.armL = armL; g.userData.armR = armR;
+  scene.add(g);
+  return g;
+}
+
+/* =========================================================================
+   9. 收集物 🔥
+   ========================================================================= */
+function createFlames() {
+  const outerMat = new THREE.MeshBasicMaterial({ color: 0xff8a3a });
+  const innerMat = new THREE.MeshBasicMaterial({ color: 0xffe888 });
+  for (let i = 0; i < 18; i++) {
+    let n = randomSphereNormal();
+    let tries = 0;
+    while (tooCloseToLandmark(n, 0.13) && tries < 60) { n = randomSphereNormal(); tries++; }
+    const g = new THREE.Group();
+    const outer = new THREE.Mesh(new THREE.ConeGeometry(0.62, 1.9, 6), outerMat);
+    outer.position.y = 0.95; g.add(outer);
+    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.1, 6), innerMat);
+    inner.position.y = 0.95; g.add(inner);
+    g.position.copy(n.clone().multiplyScalar(R + 0.9));
+    g.quaternion.setFromUnitVectors(UP, n);
+    scene.add(g);
+    flames.push({ group: g, normal: n, alive: true, phase: Math.random() * Math.PI * 2 });
+  }
+}
+
+/* =========================================================================
+   10. 天空系統
+   ========================================================================= */
+const SKY_KEYS = [
+  { t: 0,  sky: new THREE.Color(0x152242), hemiC: new THREE.Color(0x6688cc), ambC: new THREE.Color(0x8899cc), hemi: 0.28, amb: 0.22, dir: 0.34 },
+  { t: 5,  sky: new THREE.Color(0x152242), hemiC: new THREE.Color(0x6688cc), ambC: new THREE.Color(0x8899cc), hemi: 0.28, amb: 0.22, dir: 0.34 },
+  { t: 6,  sky: new THREE.Color(0xff8a4a), hemiC: new THREE.Color(0xffd0a0), ambC: new THREE.Color(0xffc8a0), hemi: 0.62, amb: 0.34, dir: 0.70 },
+  { t: 7,  sky: new THREE.Color(0xbfe3ff), hemiC: new THREE.Color(0xffffff), ambC: new THREE.Color(0xffffff), hemi: 0.95, amb: 0.42, dir: 1.05 },
+  { t: 17, sky: new THREE.Color(0xbfe3ff), hemiC: new THREE.Color(0xffffff), ambC: new THREE.Color(0xffffff), hemi: 0.95, amb: 0.42, dir: 1.05 },
+  { t: 18, sky: new THREE.Color(0xffa060), hemiC: new THREE.Color(0xffc890), ambC: new THREE.Color(0xffb880), hemi: 0.70, amb: 0.34, dir: 0.78 },
+  { t: 19, sky: new THREE.Color(0x152242), hemiC: new THREE.Color(0x6688cc), ambC: new THREE.Color(0x8899cc), hemi: 0.28, amb: 0.22, dir: 0.34 },
+  { t: 24, sky: new THREE.Color(0x152242), hemiC: new THREE.Color(0x6688cc), ambC: new THREE.Color(0x8899cc), hemi: 0.28, amb: 0.22, dir: 0.34 }
+];
+function computeSky(hour) {
+  let a = SKY_KEYS[0], b = SKY_KEYS[SKY_KEYS.length - 1];
+  for (let i = 0; i < SKY_KEYS.length - 1; i++) {
+    if (hour >= SKY_KEYS[i].t && hour < SKY_KEYS[i + 1].t) { a = SKY_KEYS[i]; b = SKY_KEYS[i + 1]; break; }
+  }
+  const range = b.t - a.t;
+  const u = range > 0 ? (hour - a.t) / range : 0;
+  return {
+    sky: a.sky.clone().lerp(b.sky, u),
+    hemiC: a.hemiC.clone().lerp(b.hemiC, u),
+    ambC: a.ambC.clone().lerp(b.ambC, u),
+    hemi: a.hemi + (b.hemi - a.hemi) * u,
+    amb: a.amb + (b.amb - a.amb) * u,
+    dir: a.dir + (b.dir - a.dir) * u
+  };
+}
+function applySky(hour) {
+  const s = computeSky(hour);
+  scene.background.copy(s.sky);
+  scene.fog.color.copy(s.sky);
+  hemiLight.color.copy(s.hemiC);
+  hemiLight.intensity = s.hemi;
+  ambientLight.color.copy(s.ambC);
+  ambientLight.intensity = s.amb;
+  dirLight.intensity = s.dir;
+
+  const night = (hour < 6 || hour >= 19);
+  if (night !== lastNightState) {
+    lastNightState = night;
+    isNight = night;
+    updateNightMarkets(isNight);
+    document.getElementById('btn-daynight').textContent = isNight ? '🌙' : '☀️';
+  }
+}
+function toggleDayNight() {
+  gameMinutes = isNight ? 7 * 60 : 21 * 60;
+}
+
+/* =========================================================================
+   11. 下雨
+   ========================================================================= */
+const Rain = {
+  enabled: false, canvas: null, ctx: null, drops: [],
+  init: function () {
+    this.canvas = document.getElementById('rain-overlay');
+    if (!this.canvas) return;
+    this.ctx = this.canvas.getContext('2d');
+    this.resize();
+    for (let i = 0; i < 180; i++) {
+      this.drops.push({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        len: 12 + Math.random() * 14,
+        speed: 620 + Math.random() * 380
+      });
+    }
+    window.addEventListener('resize', this.resize.bind(this));
+  },
+  resize: function () {
+    if (!this.canvas) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.canvas.width = Math.floor(window.innerWidth * dpr);
+    this.canvas.height = Math.floor(window.innerHeight * dpr);
+    this.canvas.style.width = window.innerWidth + 'px';
+    this.canvas.style.height = window.innerHeight + 'px';
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  },
+  setEnabled: function (v) {
+    this.enabled = v;
+    if (!this.canvas) return;
+    this.canvas.style.display = v ? 'block' : 'none';
+    if (!v && this.ctx) this.ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+  },
+  update: function (dt) {
+    if (!this.enabled || !this.ctx) return;
+    const ctx = this.ctx;
+    const w = window.innerWidth, h = window.innerHeight;
+    ctx.clearRect(0, 0, w, h);
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = 'rgba(190, 215, 245, 0.55)';
+    ctx.beginPath();
+    for (let i = 0; i < this.drops.length; i++) {
+      const d = this.drops[i];
+      d.y += d.speed * dt;
+      if (d.y > h + d.len) { d.y = -d.len - Math.random() * 120; d.x = Math.random() * w; }
+      ctx.moveTo(d.x, d.y);
+      ctx.lineTo(d.x - 2.5, d.y + d.len);
+    }
+    ctx.stroke();
+  }
+};
+
+/* =========================================================================
+   12. 藥老帶路
+   ========================================================================= */
+const guide = { active: false, target: null, pathPts: [], marks: [], model: null };
+let guideSelectMode = false;
+
+function clampD(v) { return Math.max(-1, Math.min(1, v)); }
+function slerpDir(a, b, t) {
+  const dot = clampD(a.dot(b));
+  const theta = Math.acos(dot);
+  if (theta < 1e-5) return a.clone();
+  const sinT = Math.sin(theta);
+  const w1 = Math.sin((1 - t) * theta) / sinT;
+  const w2 = Math.sin(t * theta) / sinT;
+  return a.clone().multiplyScalar(w1).addScaledVector(b, w2).normalize();
+}
+function buildGuidePath(fromDir, toDir, segments) {
+  const a = fromDir.clone().normalize();
+  const b = toDir.clone().normalize();
+  const angle = Math.acos(clampD(a.dot(b)));
+  const side = new THREE.Vector3().crossVectors(a, b);
+  const hasSide = side.lengthSq() > 1e-8;
+  if (hasSide) side.normalize();
+  const bulge = Math.min(0.30, angle * 0.20);
+  const pts = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    const v = slerpDir(a, b, t);
+    if (hasSide) {
+      const tangentSide = side.clone().addScaledVector(v, -side.dot(v));
+      if (tangentSide.lengthSq() > 1e-8) {
+        tangentSide.normalize();
+        v.addScaledVector(tangentSide, Math.sin(Math.PI * t) * bulge).normalize();
+      }
+    }
+    pts.push(v);
+  }
+  return pts;
+}
+
+function createYaoLaoModel() {
+  const g = new THREE.Group();
+  const ghost  = new THREE.MeshBasicMaterial({ color: 0xcdeaff, transparent: true, opacity: 0.62, depthWrite: false });
+  const ghost2 = new THREE.MeshBasicMaterial({ color: 0xa8d8ff, transparent: true, opacity: 0.45, depthWrite: false });
+  const glow   = new THREE.MeshBasicMaterial({ color: 0x9fdcff, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending });
+  const white  = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false });
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(2.2, 16, 12), glow);
+  halo.position.y = 1.4; g.add(halo);
+  const robe = new THREE.Mesh(new THREE.ConeGeometry(0.95, 2.8, 8), ghost);
+  robe.position.y = 1.2; g.add(robe);
+  const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.72, 10, 8), ghost2);
+  shoulder.position.y = 2.45; g.add(shoulder);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 10), ghost);
+  head.position.y = 3.0; g.add(head);
+  const hair = new THREE.Mesh(
+    new THREE.SphereGeometry(0.58, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), white);
+  hair.position.y = 3.06; g.add(hair);
+  const beard = new THREE.Mesh(new THREE.ConeGeometry(0.32, 1.0, 6), white);
+  beard.position.set(0, 2.42, 0.26); beard.rotation.x = Math.PI * 0.94; g.add(beard);
+  const e1 = new THREE.Mesh(new THREE.SphereGeometry(0.085, 6, 6), eyeMat);
+  e1.position.set(-0.19, 3.03, 0.47); g.add(e1);
+  const e2 = e1.clone(); e2.position.x = 0.19; g.add(e2);
+
+  g.userData.halo = halo;
+  g.scale.setScalar(1.05);
+  g.visible = false;
+  scene.add(g);
+  return g;
+}
+
+function createPathMark(normal, idx) {
+  const grp = new THREE.Group();
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(1.5, 2.3, 20), ringMat);
+  ring.rotation.x = -Math.PI / 2; grp.add(ring);
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0xfff3b0, transparent: true, opacity: 1, depthWrite: false });
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), coreMat);
+  grp.add(core);
+  grp.position.copy(normal).multiplyScalar(R + 0.28);
+  grp.quaternion.setFromUnitVectors(UP, normal);
+  scene.add(grp);
+  return { group: grp, ringMat: ringMat, coreMat: coreMat, idx: idx, alive: true, fade: -1 };
+}
+
+function startGuide(lm) {
+  if (guide.active) { showToast('藥老已在帶路中'); return; }
+  if (save.completed.indexOf(lm.def.id) >= 0) { showToast('此地標已完成，不需帶路'); return; }
+  if (save.fire < 5) { showToast('🔥 不足，需要 5 個才能請藥老帶路'); return; }
+
+  const from = player.pos.clone().normalize();
+  const to = lm.normal.clone();
+  const angle = Math.acos(clampD(from.dot(to)));
+  if (angle * R < 18) { showToast('已經很近了，直接走過去吧'); return; }
+
+  save.fire -= 5; persist(); updateHUD();
+
+  guide.pathPts = buildGuidePath(from, to, 10);
+  guide.target = lm;
+  guide.active = true;
+  guide.marks = [];
+  for (let i = 1; i < guide.pathPts.length - 1; i++) {
+    guide.marks.push(createPathMark(guide.pathPts[i], i));
+  }
+  if (!guide.model) guide.model = createYaoLaoModel();
+  guide.model.visible = true;
+  const n1 = guide.pathPts[1] || to;
+  guide.model.position.copy(n1.clone().multiplyScalar(R + 6.5));
+  guide.model.quaternion.setFromUnitVectors(UP, n1);
+
+  showToast(GUIDE_NAME + '：小家伙，跟着老夫走。');
+  sfxGuide();
+  updateGuideBanner();
+  renderQuestList();
+}
+
+function endGuide(reached) {
+  if (!guide.active) return;
+  guide.active = false;
+  if (guide.model) guide.model.visible = false;
+  for (let i = 0; i < guide.marks.length; i++) scene.remove(guide.marks[i].group);
+  guide.marks = [];
+  guide.target = null;
+  updateGuideBanner();
+  renderQuestList();
+  if (reached) {
+    showToast(GUIDE_NAME + '：到了，剩下的靠你自己。');
+    sfxDone();
+  } else {
+    showToast(GUIDE_NAME + '：不去了？那 5 個 🔥 可不退還。');
+  }
+}
+
+function updateGuide(dt, playerNormal) {
+  if (!guide.active || !guide.target) return;
+  const t = performance.now() * 0.001;
+  const toTarget = Math.acos(clampD(playerNormal.dot(guide.target.normal))) * R;
+  if (toTarget < 15) { endGuide(true); return; }
+
+  let nearest = 0, best = 1e9;
+  for (let i = 0; i < guide.pathPts.length; i++) {
+    const ang = Math.acos(clampD(playerNormal.dot(guide.pathPts[i])));
+    if (ang < best) { best = ang; nearest = i; }
+  }
+  const idx = Math.min(nearest + 1, guide.pathPts.length - 1);
+  const node = guide.pathPts[idx];
+
+  const targetPos = node.clone().multiplyScalar(R + 6.5);
+  if (guide.model) {
+    guide.model.position.lerp(targetPos, 1 - Math.pow(0.0006, dt));
+    const gN = guide.model.position.clone().normalize();
+    guide.model.quaternion.setFromUnitVectors(UP, gN);
+    guide.model.position.addScaledVector(gN, Math.sin(t * 2.2) * 0.45);
+    const halo = guide.model.userData.halo;
+    if (halo) halo.scale.setScalar(1 + Math.sin(t * 3.1) * 0.13);
+  }
+
+  for (let i = 0; i < guide.marks.length; i++) {
+    const m = guide.marks[i];
+    if (!m.alive) continue;
+    const ang = Math.acos(clampD(playerNormal.dot(m.group.position.clone().normalize()))) * R;
+    if (m.fade < 0 && ang < 9) m.fade = 0.3;
+    if (m.fade >= 0) {
+      m.fade -= dt;
+      const k = Math.max(0, m.fade / 0.3);
+      m.ringMat.opacity = 0.8 * k;
+      m.coreMat.opacity = k;
+      m.group.scale.setScalar(0.6 + 0.4 * k);
+      if (m.fade <= 0) { m.group.visible = false; m.alive = false; }
+    } else {
+      m.group.scale.setScalar(1 + Math.sin(t * 3.2 + m.idx * 0.8) * 0.18);
+    }
+  }
+}
+
+function updateGuideBanner() {
+  const banner = document.getElementById('guide-banner');
+  const txt = document.getElementById('guide-text');
+  if (guide.active && guide.target) {
+    txt.textContent = GUIDE_NAME + '帶路中：前往 ' + guide.target.def.name;
+    banner.classList.remove('hidden');
+  } else {
+    banner.classList.add('hidden');
+  }
+}
+
+/* =========================================================================
+   13. 更新邏輯
+   ========================================================================= */
+function update(dt) {
+  gameMinutes = (gameMinutes + dt) % 1440;
+  applySky(gameMinutes / 60);
+
+  const t = performance.now() * 0.001;
+  animateNightMarkets(t);
+
+  let ix = joyVec.x;
+  let iz = -joyVec.y;
+  if (keys['w'] || keys['arrowup']) iz += 1;
+  if (keys['s'] || keys['arrowdown']) iz -= 1;
+  if (keys['a'] || keys['arrowleft']) ix -= 1;
+  if (keys['d'] || keys['arrowright']) ix += 1;
+
+  const mag = Math.hypot(ix, iz);
+  if (mag > 1) { ix /= mag; iz /= mag; }
+
+  const n = player.pos.clone().normalize();
+  let f = player.forward.clone();
+  f.addScaledVector(n, -f.dot(n));
+  if (f.lengthSq() < 1e-6) f.copy(new THREE.Vector3(0, 0, 1));
+  f.normalize();
+
+  if (Math.hypot(ix, iz) > 0.09) {
+    const right = new THREE.Vector3().crossVectors(f, n).normalize();
+    const dir = new THREE.Vector3().addScaledVector(f, iz).addScaledVector(right, ix).normalize();
+    player.pos.addScaledVector(dir, player.speed * dt);
+    player.pos.normalize().multiplyScalar(R);
+    const k = 1 - Math.pow(0.0006, dt);
+    player.forward.lerp(dir, k).normalize();
+  }
+
+  if (!player.onGround) {
+    player.jumpH += player.jumpVel * dt;
+    player.jumpVel -= 95 * dt;
+    if (player.jumpH <= 0) { player.jumpH = 0; player.jumpVel = 0; player.onGround = true; }
+  }
+
+  const pn = player.pos.clone().normalize();
+  playerGroup.position.copy(pn).multiplyScalar(R + player.jumpH);
+
+  let pf = player.forward.clone();
+  pf.addScaledVector(pn, -pf.dot(pn)).normalize();
+  const xAxis = new THREE.Vector3().crossVectors(pn, pf).normalize();
+  const zAxis = new THREE.Vector3().crossVectors(xAxis, pn).normalize();
+  playerGroup.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAxis, pn, zAxis));
+
+  const swing = Math.hypot(ix, iz) > 0.1 ? Math.sin(performance.now() * 0.012) * 0.5 : 0;
+  playerGroup.userData.armL.rotation.x = swing;
+  playerGroup.userData.armR.rotation.x = -swing;
+
+  for (let i = 0; i < flames.length; i++) {
+    const fl = flames[i];
+    if (!fl.alive) continue;
+    fl.group.rotation.y = t * 1.6 + fl.phase;
+    fl.group.position.copy(fl.normal).multiplyScalar(R + 0.9 + Math.sin(t * 2.2 + fl.phase) * 0.28);
+    const ang = Math.acos(THREE.MathUtils.clamp(fl.normal.dot(pn), -1, 1));
+    if (ang * R < 4.2 && player.jumpH < 5) {
+      fl.alive = false;
+      fl.group.visible = false;
+      save.fire += 1; persist(); sfxPick(); updateHUD();
+    }
+  }
+
+  updateGuide(dt, pn);
+  updateInteract();
+  updateHUD();
+}
+
+function updateInteract() {
+  const pn = player.pos.clone().normalize();
+  let best = null, bestAng = 0.17;
+  for (let i = 0; i < landmarks.length; i++) {
+    const lm = landmarks[i];
+    const ang = Math.acos(THREE.MathUtils.clamp(lm.normal.dot(pn), -1, 1));
+    if (ang < bestAng) { bestAng = ang; best = lm; }
+  }
+  nearLandmark = best;
+  const btn = document.getElementById('btn-interact');
+  if (best) {
+    const done = save.completed.indexOf(best.def.id) >= 0;
+    btn.textContent = done ? ('再訪 ' + best.def.name) : ('與 ' + best.def.name + ' 對話');
+    btn.classList.remove('hidden');
+  } else {
+    btn.classList.add('hidden');
+  }
+}
+
+/* =========================================================================
+   14. 相機
+   ========================================================================= */
+function updateCamera(dt) {
+  const n = player.pos.clone().normalize();
+  let f = player.forward.clone();
+  f.addScaledVector(n, -f.dot(n)).normalize();
+
+  const camTarget = player.pos.clone().addScaledVector(n, 17).addScaledVector(f, -30);
+  const k = 1 - Math.pow(0.0008, dt);
+  camera.position.lerp(camTarget, k);
+
+  const upVec = camera.position.clone().normalize();
+  camera.up.lerp(upVec, 1 - Math.pow(0.0008, dt)).normalize();
+
+  const lookAt = player.pos.clone().addScaledVector(n, 3.5).addScaledVector(f, 7);
+  camera.lookAt(lookAt);
+}
+
+/* =========================================================================
+   15. HUD
+   ========================================================================= */
+const elFire = document.getElementById('stat-fire');
+const elCoin = document.getElementById('stat-coin');
+const elTime = document.getElementById('game-time');
+const elNeedle = document.getElementById('compass-needle');
+const minimapCanvas = document.getElementById('minimap');
+const minimapCtx = minimapCanvas.getContext('2d');
+
+function updateHUD() {
+  elFire.textContent = save.fire;
+  elCoin.textContent = save.coin;
+
+  const h = Math.floor(gameMinutes / 60);
+  const m = Math.floor(gameMinutes % 60);
+  elTime.textContent = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+
+  const n = player.pos.clone().normalize();
+  let f = player.forward.clone();
+  f.addScaledVector(n, -f.dot(n)).normalize();
+  const right = new THREE.Vector3().crossVectors(f, n).normalize();
+
+  const north = new THREE.Vector3(0, 1, 0);
+  let nt = north.clone().addScaledVector(n, -north.dot(n));
+  if (nt.lengthSq() < 1e-5) nt.set(0, 0, 1);
+  nt.normalize();
+  elNeedle.style.transform = 'rotate(' + Math.atan2(nt.dot(right), nt.dot(f)) + 'rad)';
+
+  drawMinimap(n, f, right);
+}
+
+function drawMinimap(n, f, right) {
+  const W = minimapCanvas.width, H = minimapCanvas.height;
+  const cx = W / 2, cy = H / 2;
+  const Rm = W / 2 - 8;
+
+  minimapCtx.clearRect(0, 0, W, H);
+  minimapCtx.beginPath();
+  minimapCtx.arc(cx, cy, Rm, 0, Math.PI * 2);
+  minimapCtx.fillStyle = 'rgba(120, 190, 130, 0.38)';
+  minimapCtx.fill();
+  minimapCtx.strokeStyle = 'rgba(255,255,255,0.9)';
+  minimapCtx.lineWidth = 4;
+  minimapCtx.stroke();
+
+  const maxAng = Math.PI * 0.86;
+  for (let i = 0; i < landmarks.length; i++) {
+    const lm = landmarks[i];
+    const dir = lm.normal;
+    const a = Math.acos(THREE.MathUtils.clamp(dir.dot(n), -1, 1));
+    const heading = Math.atan2(dir.dot(right), dir.dot(f));
+    const rad = Math.min(a / maxAng, 1) * (Rm - 14);
+    const px = cx + Math.sin(heading) * rad;
+    const py = cy - Math.cos(heading) * rad;
+
+    const done = save.completed.indexOf(lm.def.id) >= 0;
+    minimapCtx.beginPath();
+    minimapCtx.arc(px, py, 9, 0, Math.PI * 2);
+    minimapCtx.fillStyle = done ? '#7ac07a' : '#ffc93c';
+    minimapCtx.fill();
+    minimapCtx.strokeStyle = '#4a3218';
+    minimapCtx.lineWidth = 2.5;
+    minimapCtx.stroke();
+
+    if (guide.active && guide.target === lm) {
+      minimapCtx.beginPath();
+      minimapCtx.arc(px, py, 15, 0, Math.PI * 2);
+      minimapCtx.strokeStyle = '#4a9aff';
+      minimapCtx.lineWidth = 3.5;
+      minimapCtx.stroke();
+    }
+  }
+
+  minimapCtx.beginPath();
+  minimapCtx.moveTo(cx, cy - 13);
+  minimapCtx.lineTo(cx - 9, cy + 9);
+  minimapCtx.lineTo(cx, cy + 4);
+  minimapCtx.lineTo(cx + 9, cy + 9);
+  minimapCtx.closePath();
+  minimapCtx.fillStyle = '#ffffff';
+  minimapCtx.fill();
+  minimapCtx.strokeStyle = '#1a3a6a';
+  minimapCtx.lineWidth = 2.5;
+  minimapCtx.stroke();
+}
+
+/* =========================================================================
+   16. 對話與任務
+   ========================================================================= */
+const dlgEl = document.getElementById('dialog');
+const dlgName = document.getElementById('dlg-name');
+const dlgText = document.getElementById('dlg-text');
+const dlgOptions = document.getElementById('dlg-options');
+let activeLandmark = null;
+
+function openDialog(lm) {
+  activeLandmark = lm;
+  dlgName.textContent = lm.def.npc;
+  dlgOptions.innerHTML = '';
+
+  const done = save.completed.indexOf(lm.def.id) >= 0;
+  const mg = MG_DEFS[lm.def.id];
+
+  if (mg) {
+    if (done) {
+      dlgText.textContent = '你又來了。想再試一次「' + mg.title + '」嗎？\n（重玩獎勵為首次的 30%）';
+      addOption('重玩「' + mg.title + '」', function () { closeDialog(); mgStart(lm); });
+      addOption('離開', closeDialog);
+    } else {
+      dlgText.textContent = lm.def.opening + '\n\n【' + mg.title + '】\n' + mg.desc;
+      addOption('開始挑戰', function () { closeDialog(); mgStart(lm); });
+      addOption('先四處看看', closeDialog);
+    }
+  }
+  dlgEl.classList.remove('hidden');
+}
+function addOption(text, handler) {
+  const b = document.createElement('button');
+  b.className = 'dlg-opt';
+  b.textContent = text;
+  b.addEventListener('click', handler);
+  dlgOptions.appendChild(b);
+}
+function closeDialog() {
+  dlgEl.classList.add('hidden');
+  activeLandmark = null;
+}
+
+function renderQuestList() {
+  const titleEl = document.getElementById('quest-title');
+  titleEl.textContent = guideSelectMode ? '🧭 選擇要前往的地標' : '📜 任務清單';
+
+  const btnGuide = document.getElementById('btn-guide-start');
+  if (guide.active) {
+    btnGuide.textContent = '🧭 ' + GUIDE_NAME + '帶路中…（點此取消，不退🔥）';
+    btnGuide.classList.add('active');
+    btnGuide.disabled = false;
+  } else if (save.fire < 5) {
+    btnGuide.textContent = '🔥 不足（需 5 個）';
+    btnGuide.classList.remove('active');
+    btnGuide.disabled = true;
+  } else if (guideSelectMode) {
+    btnGuide.textContent = '點選下方一個未完成地標（花 5🔥）';
+    btnGuide.classList.add('active');
+    btnGuide.disabled = false;
+  } else {
+    btnGuide.textContent = '🔥 請' + GUIDE_NAME + '帶路（5🔥）';
+    btnGuide.classList.remove('active');
+    btnGuide.disabled = false;
+  }
+
+  const list = document.getElementById('quest-list');
+  list.innerHTML = '';
+
+  WORLD.landmarks.forEach(function (lm, idx) {
+    const done = save.completed.indexOf(lm.id) >= 0;
+    const mg = MG_DEFS[lm.id];
+    const div = document.createElement('div');
+    div.className = 'quest-item' + (done ? ' done' : '');
+    if (guideSelectMode && !done) div.className += ' selectable';
+    div.innerHTML =
+      '<div class="quest-dot"></div>' +
+      '<div class="quest-name">' + (idx + 1) + '. ' + lm.name +
+        '<div style="font-size:11.5px;font-weight:600;color:#8a7a5a;margin-top:2px;">' +
+        (mg ? mg.title : '') + '</div></div>' +
+      '<div class="quest-state">' + (done ? '已完成' : (guideSelectMode ? '點我前往' : '未完成')) + '</div>';
+
+    if (guideSelectMode && !done) {
+      div.addEventListener('click', function () {
+        guideSelectMode = false;
+        startGuide(lm);
+        document.getElementById('quest-panel').classList.add('hidden');
+      });
+    }
+    list.appendChild(div);
+  });
+
+  const foot = document.createElement('div');
+  foot.style.cssText = 'margin-top:14px;padding-top:12px;border-top:2px dashed #e0cfae;font-size:12.5px;color:#7a6a4a;line-height:1.7;';
+  foot.innerHTML = '<b>地名彩蛋</b>（本作僅以文案呈現，未設互動）：' + WORLD.easterEggs.join('、') + '。';
+  list.appendChild(foot);
+
+  const note = document.createElement('div');
+  note.style.cssText = 'margin-top:10px;font-size:12px;color:#9a8a6a;line-height:1.6;';
+  note.textContent = '※ 虛構世界，非真實地理，無 OSM 對應。小遊戲情節參考原著常見設定，建議校對後再上線。';
+  list.appendChild(note);
+}
+
+function checkAllDone() {
+  if (save.completed.length >= WORLD.landmarks.length) setTimeout(showFinish, 500);
+}
+function showFinish() {
+  document.getElementById('finish-panel').classList.remove('hidden');
+  drawPostcardOn(document.getElementById('postcard-canvas'));
+}
+
+/* =========================================================================
+   17. 分享圖：共用繪製
+   ========================================================================= */
+function pad2(n) { return n < 10 ? '0' + n : String(n); }
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '/' + pad2(d.getMonth() + 1) + '/' + pad2(d.getDate());
+}
+function roundRectPath(ctx, x, y, w, h, r) {
+  if (typeof ctx.roundRect === 'function') {
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, r); return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function drawStars(ctx, W, H, count, alpha) {
+  ctx.fillStyle = 'rgba(255,255,255,' + alpha + ')';
+  for (let i = 0; i < count; i++) {
+    const x = (i * 97 + 13) % W;
+    const y = (i * 53 + 27) % H;
+    ctx.beginPath(); ctx.arc(x, y, 1 + (i % 3) * 0.6, 0, Math.PI * 2); ctx.fill();
+  }
+}
+function drawLandmarkDot(ctx, px, py, r, done, idx) {
+  ctx.beginPath();
+  ctx.arc(px, py, r, 0, Math.PI * 2);
+  ctx.fillStyle = done ? '#3fbf4f' : '#ffc93c';
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#4a3218';
+  ctx.stroke();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold ' + Math.round(r * 1.2) + 'px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(done ? '✓' : String(idx + 1), px, py + 1);
+  ctx.textBaseline = 'alphabetic';
+}
+function drawPostcardOn(canvas) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, '#bfe3ff');
+  grad.addColorStop(0.42, '#e8f4ff');
+  grad.addColorStop(0.75, '#ffe9c9');
+  grad.addColorStop(1, '#ffd7a0');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+  drawStars(ctx, W, H * 0.5, 26, 0.55);
+
+  const cx = W / 2, cy = H * 0.30, rr = W * 0.27;
+  const planetGrd = ctx.createRadialGradient(cx - rr * 0.35, cy - rr * 0.4, rr * 0.15, cx, cy, rr);
+  planetGrd.addColorStop(0, '#b8eaa0');
+  planetGrd.addColorStop(1, '#6cc45a');
+  ctx.beginPath();
+  ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+  ctx.fillStyle = planetGrd; ctx.fill();
+  ctx.lineWidth = 8; ctx.strokeStyle = '#2c3d28'; ctx.stroke();
+
+  ctx.fillStyle = 'rgba(60, 140, 60, 0.28)';
+  for (let i = 0; i < 9; i++) {
+    const a = i / 9 * Math.PI * 2 + 0.4;
+    const rad = rr * 0.72;
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad * 0.9, Math.max(4, rr * 0.05), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const n = WORLD.landmarks.length;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+    const rad = rr * 0.93;
+    const done = save.completed.indexOf(WORLD.landmarks[i].id) >= 0;
+    drawLandmarkDot(ctx, cx + Math.cos(a) * rad, cy + Math.sin(a) * rad, 12, done, i);
+  }
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#2a4a7a';
+  ctx.font = 'bold 54px "Noto Sans TC", "PingFang TC", sans-serif';
+  ctx.fillText('鬥氣大陸 · 旅程完成', W / 2, H * 0.60);
+
+  ctx.fillStyle = '#5a4a2a';
+  ctx.font = '30px "Noto Sans TC", "PingFang TC", sans-serif';
+  ctx.fillText('旅行者：' + save.nickname, W / 2, H * 0.665);
+
+  ctx.font = '27px "Noto Sans TC", "PingFang TC", sans-serif';
+  ctx.textAlign = 'left';
+  const startY = H * 0.72;
+  WORLD.landmarks.forEach(function (lm, i) {
+    const col = i % 2, row = Math.floor(i / 2);
+    const x = W * 0.13 + col * W * 0.42;
+    const y = startY + row * 48;
+    const done = save.completed.indexOf(lm.id) >= 0;
+    ctx.fillStyle = done ? '#3a8a3a' : '#9a8a5a';
+    ctx.fillText(done ? '✓' : '○', x, y);
+    ctx.fillStyle = done ? '#4a3a20' : '#8a7a5a';
+    ctx.fillText(lm.name, x + 32, y);
+  });
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#8a7a5a';
+  ctx.font = '22px "Noto Sans TC", "PingFang TC", sans-serif';
+  ctx.fillText('收集 🔥 ' + save.fire + '　金幣 🪙 ' + save.coin, W / 2, H * 0.905);
+  ctx.font = '19px "Noto Sans TC", "PingFang TC", sans-serif';
+  ctx.fillStyle = '#8a7a5a';
+  ctx.fillText('紀錄日期：' + todayStr(), W / 2, H * 0.938);
+  ctx.fillStyle = '#a09a8a';
+  ctx.fillText('虛構世界創作，非真實地理', W / 2, H * 0.968);
+}
+function drawProgressCard() {
+  const canvas = document.getElementById('progress-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, '#bfe3ff');
+  grad.addColorStop(0.5, '#e8f4ff');
+  grad.addColorStop(1, '#ffe9c9');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+  drawStars(ctx, W, H * 0.6, 34, 0.55);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#2a4a7a';
+  ctx.font = 'bold 40px "Noto Sans TC", "PingFang TC", sans-serif';
+  ctx.fillText('旅程進度圖', W / 2, 74);
+
+  const cx = W / 2, cy = 330, rr = 155;
+  const planetGrd = ctx.createRadialGradient(cx - rr * 0.35, cy - rr * 0.4, rr * 0.15, cx, cy, rr);
+  planetGrd.addColorStop(0, '#b8eaa0');
+  planetGrd.addColorStop(1, '#6cc45a');
+  ctx.beginPath();
+  ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+  ctx.fillStyle = planetGrd; ctx.fill();
+  ctx.lineWidth = 10; ctx.strokeStyle = '#2c3d28'; ctx.stroke();
+
+  ctx.fillStyle = 'rgba(60, 140, 60, 0.28)';
+  for (let i = 0; i < 7; i++) {
+    const a = i / 7 * Math.PI * 2 + 0.4;
+    const rad = rr * 0.72;
+    ctx.beginPath(); ctx.arc(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad * 0.9, 13, 0, Math.PI * 2); ctx.fill();
+  }
+
+  const n = WORLD.landmarks.length;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+    const rad = rr * 0.95;
+    const done = save.completed.indexOf(WORLD.landmarks[i].id) >= 0;
+    drawLandmarkDot(ctx, cx + Math.cos(a) * rad, cy + Math.sin(a) * rad * 0.95, 18, done, i);
+  }
+
+  ctx.textAlign = 'left';
+  ctx.font = '20px "Noto Sans TC", "PingFang TC", sans-serif';
+  for (let i = 0; i < n; i++) {
+    const lm = WORLD.landmarks[i];
+    const done = save.completed.indexOf(lm.id) >= 0;
+    const col = i % 2, row = Math.floor(i / 2);
+    const x = W * 0.14 + col * W * 0.42;
+    const y = 556 + row * 32;
+    ctx.fillStyle = done ? '#3a8a3a' : '#9a8a5a';
+    ctx.fillText((done ? '✓ ' : '○ ') + lm.name, x, y);
+  }
+
+  const total = n;
+  const doneCount = save.completed.length;
+  const barX = 80, barY = 680, barW = W - 160, barH = 26;
+  roundRectPath(ctx, barX, barY, barW, barH, 13);
+  ctx.fillStyle = 'rgba(255,255,255,0.78)';
+  ctx.fill();
+  if (doneCount > 0) {
+    const fillW = Math.max(26, barW * (doneCount / total));
+    roundRectPath(ctx, barX, barY, fillW, barH, 13);
+    const fillGrd = ctx.createLinearGradient(barX, 0, barX + barW, 0);
+    fillGrd.addColorStop(0, '#4aa84a');
+    fillGrd.addColorStop(1, '#7ac07a');
+    ctx.fillStyle = fillGrd;
+    ctx.fill();
+  }
+  ctx.fillStyle = doneCount === total ? '#ffffff' : '#2a4a7a';
+  ctx.font = 'bold 20px "Noto Sans TC", "PingFang TC", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(doneCount + ' / ' + total, W / 2, barY + barH / 2 + 1);
+
+  ctx.fillStyle = '#4a3a20';
+  ctx.font = 'bold 26px "Noto Sans TC", "PingFang TC", sans-serif';
+  ctx.fillText('旅行者：' + save.nickname, W / 2, 762);
+
+  ctx.fillStyle = '#6a5a3a';
+  ctx.font = '22px "Noto Sans TC", "PingFang TC", sans-serif';
+  ctx.fillText('🔥 ' + save.fire + '　🪙 ' + save.coin, W / 2, 802);
+
+  ctx.fillStyle = '#8a7a5a';
+  ctx.font = '18px "Noto Sans TC", "PingFang TC", sans-serif';
+  ctx.fillText('紀錄日期：' + todayStr(), W / 2, 840);
+
+  ctx.fillStyle = '#a89a7a';
+  ctx.font = '15px "Noto Sans TC", "PingFang TC", sans-serif';
+  ctx.fillText('虛構世界創作，非真實地理', W / 2, 862);
+}
+
+function downloadDataURL(url, name) {
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+function downloadCanvas(canvas, name) {
+  try { downloadDataURL(canvas.toDataURL('image/png'), name); }
+  catch (e) { showToast('此裝置不支援圖片下載'); }
+}
+
+/* =========================================================================
+   18. 匯出／匯入存檔（單機備份，也是之後接後端前的過渡方案）
+   ========================================================================= */
+function exportSaveJSON() {
+  const data = JSON.stringify(save, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  downloadDataURL(url, 'douqi-save-' + save.playerId + '.json');
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+  showToast('存檔已匯出');
+}
+function importSaveJSON(file) {
+  if (MiniGame.active) { showToast('請先離開小遊戲再匯入'); return; }
+  const reader = new FileReader();
+  reader.onload = function () {
+    try {
+      const raw = JSON.parse(reader.result);
+      const migrated = migrateSave(raw);
+      if (!migrated) { showToast('存檔格式不正確'); return; }
+      Object.assign(save, migrated);
+      if (!save.playerId) save.playerId = genPlayerId();
+      persist();
+      updateHUD();
+      renderQuestList();
+      if (!document.getElementById('progress-panel').classList.contains('hidden')) drawProgressCard();
+      Rain.setEnabled(!!save.rain);
+      document.getElementById('btn-weather').textContent = save.rain ? '🌧️' : '🌤️';
+      document.getElementById('btn-weather').classList.toggle('off', !save.rain);
+      document.getElementById('btn-music').textContent = save.sound ? '🔊' : '🔇';
+      document.getElementById('btn-music').classList.toggle('off', !save.sound);
+      showToast('存檔已匯入');
+    } catch (e) {
+      showToast('存檔解析失敗');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function openProgressPanel() {
+  document.getElementById('nickname-input').value = save.nickname;
+  drawProgressCard();
+  document.getElementById('progress-panel').classList.remove('hidden');
+}
+
+/* =========================================================================
+   19. 小遊戲定義
+   ========================================================================= */
+function angDiff(a, b) {
+  let d = (a - b) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return Math.abs(d);
+}
+
+const MG_DEFS = {
+  wutan: {
+    title: '三年之約 · 鬥氣凝聚',
+    desc: '點擊浮現的鬥氣光點，在時限內凝聚足夠的鬥氣。連擊越高，單次得分越多。',
+    duration: 30, bg: ['#2a1610', '#4a2618'],
+    init: function () { return { dots: [], spawn: 0.4, combo: 0, lastHit: 0 }; },
+    update: function (st, dt, api) {
+      st.spawn -= dt;
+      if (st.spawn <= 0) {
+        st.spawn = Math.max(0.34, 0.78 - api.elapsed * 0.014);
+        const maxR = 34;
+        st.dots.push({ x: 50 + Math.random() * (api.w - 100), y: 50 + Math.random() * (api.h - 100), maxR: maxR, r: maxR, life: 1.6, total: 1.6 });
+      }
+      for (let i = st.dots.length - 1; i >= 0; i--) {
+        const d = st.dots[i];
+        d.life -= dt; d.r = d.maxR * Math.max(0, d.life / d.total);
+        if (d.life <= 0) st.dots.splice(i, 1);
+      }
+      if (api.elapsed - st.lastHit > 1.6) st.combo = 0;
+    },
+    tap: function (st, x, y, api) {
+      for (let i = st.dots.length - 1; i >= 0; i--) {
+        const d = st.dots[i];
+        if (Math.hypot(x - d.x, y - d.y) <= d.maxR * 1.15) {
+          st.dots.splice(i, 1); st.combo++; st.lastHit = api.elapsed;
+          const gain = 10 + Math.min(st.combo - 1, 5) * 2;
+          api.addScore(gain);
+          api.status('鬥氣凝聚 +' + gain + (st.combo > 1 ? '（連擊 x' + st.combo + '）' : ''));
+          sfxHit(); return;
+        }
+      }
+      st.combo = 0; api.status('落空');
+    },
+    draw: function (st, ctx, w, h) {
+      for (let i = 0; i < st.dots.length; i++) {
+        const d = st.dots[i];
+        const a = d.life / d.total;
+        const grd = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r);
+        grd.addColorStop(0, 'rgba(255,250,220,' + (0.95 * a) + ')');
+        grd.addColorStop(0.5, 'rgba(255,180,80,' + (0.6 * a) + ')');
+        grd.addColorStop(1, 'rgba(255,120,40,0)');
+        ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+        ctx.fillStyle = grd; ctx.fill();
+        ctx.strokeStyle = 'rgba(255,240,180,' + a + ')'; ctx.lineWidth = 2; ctx.stroke();
+      }
+      if (st.combo > 0) {
+        ctx.fillStyle = 'rgba(255,220,120,0.85)';
+        ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'left';
+        ctx.fillText('連擊 x' + st.combo, 16, 36);
+      }
+    }
+  },
+
+  beast: {
+    title: '採藥人的警覺',
+    desc: '藥草從天而降，點擊採集得分；魔獸也會混在其中，誤點會扣分並縮短時間。',
+    duration: 30, bg: ['#142414', '#264826'],
+    init: function () { return { items: [], spawn: 0.4 }; },
+    update: function (st, dt, api) {
+      st.spawn -= dt;
+      if (st.spawn <= 0) {
+        st.spawn = Math.max(0.3, 0.56 - api.elapsed * 0.01);
+        const isHerb = Math.random() < 0.68;
+        st.items.push({ x: 50 + Math.random() * (api.w - 100), y: -40, vy: 110 + api.elapsed * 4.2, type: isHerb ? 'herb' : 'beast', r: isHerb ? 26 : 30, rot: Math.random() * 6.28 });
+      }
+      for (let i = st.items.length - 1; i >= 0; i--) {
+        const it = st.items[i];
+        it.y += it.vy * dt; it.rot += dt * (it.type === 'beast' ? 3 : 1);
+        if (it.y > api.h + 60) st.items.splice(i, 1);
+      }
+    },
+    tap: function (st, x, y, api) {
+      for (let i = st.items.length - 1; i >= 0; i--) {
+        const it = st.items[i];
+        if (Math.hypot(x - it.x, y - it.y) <= it.r * 1.25) {
+          st.items.splice(i, 1);
+          if (it.type === 'herb') { api.addScore(8); api.status('採到藥草 +8'); sfxHit(); }
+          else { api.penalty(2); api.addScore(-10); api.status('驚動魔獸！-10 分、-2 秒'); sfxMiss(); }
+          return;
+        }
+      }
+    },
+    draw: function (st, ctx, w, h) {
+      for (let i = 0; i < st.items.length; i++) {
+        const it = st.items[i];
+        ctx.save(); ctx.translate(it.x, it.y); ctx.rotate(it.rot);
+        if (it.type === 'herb') {
+          ctx.beginPath(); ctx.ellipse(0, 0, it.r * 0.6, it.r, 0, 0, Math.PI * 2);
+          ctx.fillStyle = '#6fcf5f'; ctx.fill();
+          ctx.strokeStyle = '#d8ffc8'; ctx.lineWidth = 2; ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(0, -it.r); ctx.lineTo(0, -it.r - 12);
+          ctx.strokeStyle = '#4a9a3a'; ctx.lineWidth = 3; ctx.stroke();
+        } else {
+          ctx.beginPath();
+          for (let k = 0; k < 6; k++) {
+            const a = k / 6 * Math.PI * 2;
+            const rr = it.r * (k % 2 ? 0.72 : 1);
+            const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
+            if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.fillStyle = '#c84a4a'; ctx.fill();
+          ctx.strokeStyle = '#ffb0b0'; ctx.lineWidth = 2; ctx.stroke();
+          ctx.beginPath(); ctx.arc(-6, -4, 3, 0, Math.PI * 2); ctx.arc(6, -4, 3, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffe0e0'; ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+  },
+
+  desert: {
+    title: '青蓮地心火 · 蛇巢奪火',
+    desc: '指針繞環移動，在綠色安全區時點擊畫面潛行。累積 10 次潛行即可提前奪火。',
+    duration: 30, bg: ['#2e2008', '#5a3e14'],
+    init: function () { return { angle: Math.random() * Math.PI * 2, zoneStart: Math.random() * Math.PI * 2, progress: 0 }; },
+    update: function (st, dt, api) {
+      st.angle += (2.0 + api.elapsed * 0.07) * dt;
+      if (st.angle > Math.PI * 2) st.angle -= Math.PI * 2;
+    },
+    tap: function (st, x, y, api) {
+      if (angDiff(st.angle, st.zoneStart) < 0.36) {
+        api.addScore(12); st.progress++; api.status('潛行成功 +12'); sfxHit();
+        st.zoneStart = Math.random() * Math.PI * 2;
+        if (st.progress >= 10) { api.addScore(50); api.status('奪火成功！ +50'); api.end(); }
+      } else {
+        api.penalty(1.5); st.progress = Math.max(0, st.progress - 1);
+        api.status('被守衛發現！-1.5 秒'); sfxMiss();
+      }
+    },
+    draw: function (st, ctx, w, h) {
+      const cx = w / 2, cy = h * 0.42;
+      const rad = Math.min(w, h) * 0.28;
+      ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,220,140,0.35)'; ctx.lineWidth = 16; ctx.stroke();
+
+      ctx.beginPath(); ctx.arc(cx, cy, rad, st.zoneStart - 0.36, st.zoneStart + 0.36);
+      ctx.strokeStyle = '#5fdf7f'; ctx.lineWidth = 16; ctx.lineCap = 'round'; ctx.stroke(); ctx.lineCap = 'butt';
+
+      const px = cx + Math.cos(st.angle) * (rad + 16);
+      const py = cy + Math.sin(st.angle) * (rad + 16);
+      const px2 = cx + Math.cos(st.angle) * (rad - 16);
+      const py2 = cy + Math.sin(st.angle) * (rad - 16);
+      ctx.beginPath(); ctx.moveTo(px2, py2); ctx.lineTo(px, py);
+      ctx.strokeStyle = '#fff2a8'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.stroke(); ctx.lineCap = 'butt';
+
+      ctx.beginPath(); ctx.arc(cx, cy, 26, 0, Math.PI * 2);
+      const fireGrd = ctx.createRadialGradient(cx, cy, 0, cx, cy, 26);
+      fireGrd.addColorStop(0, '#fff7c0');
+      fireGrd.addColorStop(0.5, '#7fe0a0');
+      fireGrd.addColorStop(1, 'rgba(80,200,120,0.1)');
+      ctx.fillStyle = fireGrd; ctx.fill();
+
+      ctx.fillStyle = 'rgba(255,240,180,0.9)';
+      ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('潛行進度 ' + st.progress + ' / 10', cx, cy + rad + 74);
+    }
+  },
+
+  academy: {
+    title: '天焚煉氣塔 · 心火淬鍊',
+    desc: '心火自塔頂落下，在光點抵達底部白線時點擊畫面淬鍊。越接近白線分數越高。',
+    duration: 30, bg: ['#161a2e', '#2a2e52'],
+    init: function (w, h) { return { notes: [], spawn: 0.4, judgeY: h - 92 }; },
+    update: function (st, dt, api) {
+      st.spawn -= dt;
+      if (st.spawn <= 0) {
+        st.spawn = Math.max(0.38, 0.78 - api.elapsed * 0.013);
+        st.notes.push({ x: 50 + Math.random() * (api.w - 100), y: -30, vy: 260 + api.elapsed * 7, judged: false });
+      }
+      for (let i = st.notes.length - 1; i >= 0; i--) {
+        const n = st.notes[i];
+        n.y += n.vy * dt;
+        if (!n.judged && n.y > st.judgeY + 46) { n.judged = true; api.status('漏接心火'); sfxMiss(); }
+        if (n.y > api.h + 40) st.notes.splice(i, 1);
+      }
+    },
+    tap: function (st, x, y, api) {
+      let best = null, bestD = 1e9;
+      for (let i = 0; i < st.notes.length; i++) {
+        const n = st.notes[i];
+        if (n.judged) continue;
+        const d = Math.abs(n.y - st.judgeY);
+        if (d < bestD) { bestD = d; best = n; }
+      }
+      if (!best) { api.status('空擊'); return; }
+      if (Math.abs(x - best.x) > 70) { api.status('偏了'); return; }
+      if (bestD < 22) { best.judged = true; api.addScore(15); api.status('完美淬鍊 +15'); sfxHit(); }
+      else if (bestD < 52) { best.judged = true; api.addScore(8); api.status('尚可 +8'); sfxHit(); }
+      else api.status('時機不對');
+    },
+    draw: function (st, ctx, w, h) {
+      const jy = st.judgeY;
+      const glow = ctx.createLinearGradient(0, jy - 30, 0, jy + 10);
+      glow.addColorStop(0, 'rgba(120,200,255,0)');
+      glow.addColorStop(1, 'rgba(120,200,255,0.25)');
+      ctx.fillStyle = glow; ctx.fillRect(0, jy - 30, w, 40);
+
+      ctx.beginPath(); ctx.moveTo(20, jy); ctx.lineTo(w - 20, jy);
+      ctx.strokeStyle = 'rgba(160,220,255,0.85)'; ctx.lineWidth = 4; ctx.stroke();
+
+      for (let i = 0; i < st.notes.length; i++) {
+        const n = st.notes[i];
+        if (n.judged) continue;
+        const alpha = Math.abs(n.y - jy) < 60 ? 1 : 0.6;
+        const grd = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, 26);
+        grd.addColorStop(0, 'rgba(230,248,255,' + alpha + ')');
+        grd.addColorStop(0.6, 'rgba(120,200,255,' + (alpha * 0.85) + ')');
+        grd.addColorStop(1, 'rgba(60,120,220,0)');
+        ctx.beginPath(); ctx.arc(n.x, n.y, 26, 0, Math.PI * 2);
+        ctx.fillStyle = grd; ctx.fill();
+        ctx.strokeStyle = 'rgba(220,240,255,' + alpha + ')'; ctx.lineWidth = 3; ctx.stroke();
+      }
+    }
+  },
+
+  danta: {
+    title: '丹會 · 靈魂力考核',
+    desc: '三階段：測魂點光點、控魂點擊引導光球進中央圈、靈魂碰撞連點中央。',
+    duration: 30, bg: ['#2a1212', '#4a1e1e'],
+    init: function (w, h) {
+      return { phase: 0, orbs: [], driftT: 0, driftAngle: Math.random() * Math.PI * 2,
+        controlBall: { x: w / 2 + 120, y: h / 2 + 120, tx: w / 2, ty: h / 2 } };
+    },
+    update: function (st, dt, api) {
+      const newPhase = api.elapsed < 9 ? 0 : (api.elapsed < 18 ? 1 : 2);
+      if (newPhase !== st.phase) {
+        st.phase = newPhase; st.orbs = [];
+        api.status(['第一階段：測魂', '第二階段：控魂', '第三階段：靈魂碰撞'][newPhase]);
+      }
+      if (st.phase === 0) {
+        if (st.orbs.length === 0) st.orbs.push({ x: 80 + Math.random() * (api.w - 160), y: 120 + Math.random() * (api.h - 240), r: 32, life: 1.3 });
+        for (let i = st.orbs.length - 1; i >= 0; i--) { st.orbs[i].life -= dt; if (st.orbs[i].life <= 0) st.orbs.splice(i, 1); }
+      } else if (st.phase === 1) {
+        st.driftT += dt;
+        if (st.driftT > 2.4) { st.driftT = 0; st.driftAngle = Math.random() * Math.PI * 2; }
+        const b = st.controlBall;
+        b.x += (b.tx - b.x) * Math.min(1, dt * 3);
+        b.y += (b.ty - b.y) * Math.min(1, dt * 3);
+        b.x += Math.cos(st.driftAngle) * 26 * dt;
+        b.y += Math.sin(st.driftAngle) * 26 * dt;
+        b.x = Math.max(40, Math.min(api.w - 40, b.x));
+        b.y = Math.max(40, Math.min(api.h - 40, b.y));
+        if (Math.hypot(b.x - api.w / 2, b.y - api.h / 2) < 90) api.addScore(dt * 14);
+      }
+    },
+    tap: function (st, x, y, api) {
+      if (st.phase === 0) {
+        for (let i = 0; i < st.orbs.length; i++) {
+          const o = st.orbs[i];
+          if (Math.hypot(x - o.x, y - o.y) < o.r * 1.25) {
+            api.addScore(10); api.status('測魂 +10'); sfxHit(); st.orbs.splice(i, 1); return;
+          }
+        }
+        api.status('沒測到');
+      } else if (st.phase === 1) {
+        st.controlBall.tx = x; st.controlBall.ty = y;
+      } else {
+        const cx = api.w / 2, cy = api.h / 2;
+        if (Math.hypot(x - cx, y - cy) < 120) { api.addScore(4); api.status('靈魂碰撞 +4'); sfxHit(); }
+      }
+    },
+    draw: function (st, ctx, w, h) {
+      const cx = w / 2, cy = h / 2;
+      if (st.phase === 0) {
+        for (let i = 0; i < st.orbs.length; i++) {
+          const o = st.orbs[i];
+          const a = Math.min(1, o.life);
+          const grd = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r);
+          grd.addColorStop(0, 'rgba(255,250,200,' + a + ')');
+          grd.addColorStop(0.6, 'rgba(255,220,120,' + (a * 0.6) + ')');
+          grd.addColorStop(1, 'rgba(255,180,60,0)');
+          ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+          ctx.fillStyle = grd; ctx.fill();
+          ctx.strokeStyle = 'rgba(255,240,180,' + a + ')'; ctx.lineWidth = 3; ctx.stroke();
+        }
+        ctx.fillStyle = 'rgba(255,230,160,0.85)';
+        ctx.font = 'bold 17px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('測魂：點擊出現的光點', cx, 40);
+      } else if (st.phase === 1) {
+        ctx.beginPath(); ctx.arc(cx, cy, 90, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(140,220,255,0.55)'; ctx.lineWidth = 4; ctx.stroke();
+
+        const b = st.controlBall;
+        const inZone = Math.hypot(b.x - cx, b.y - cy) < 90;
+        ctx.beginPath(); ctx.arc(b.x, b.y, 26, 0, Math.PI * 2);
+        ctx.fillStyle = inZone ? 'rgba(140,240,180,0.92)' : 'rgba(200,200,220,0.72)';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.stroke();
+
+        ctx.fillStyle = 'rgba(200,230,255,0.85)';
+        ctx.font = 'bold 17px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('控魂：點擊畫面引導光球進圈', cx, 40);
+      } else {
+        ctx.beginPath(); ctx.arc(cx, cy, 112, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255,160,120,0.4)'; ctx.lineWidth = 4; ctx.stroke();
+
+        const pulse = 1 + Math.sin(performance.now() * 0.006) * 0.08;
+        const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, 72 * pulse);
+        grd.addColorStop(0, 'rgba(255,240,200,0.95)');
+        grd.addColorStop(0.5, 'rgba(255,140,90,0.7)');
+        grd.addColorStop(1, 'rgba(200,60,40,0.1)');
+        ctx.beginPath(); ctx.arc(cx, cy, 72 * pulse, 0, Math.PI * 2);
+        ctx.fillStyle = grd; ctx.fill();
+        ctx.strokeStyle = '#ffd0a0'; ctx.lineWidth = 3; ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255,220,180,0.9)';
+        ctx.font = 'bold 17px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('靈魂碰撞：快速連點中央', cx, 40);
+      }
+
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('第 ' + (st.phase + 1) + ' / 3 階段', cx, h - 22);
+    }
+  }
+};
+
+/* =========================================================================
+   20. 小遊戲框架
+   ========================================================================= */
+const MiniGame = {
+  active: false, ended: false,
+  lm: null, def: null, state: null, api: null,
+  elapsed: 0, timeLeft: 0, score: 0,
+  canvas: null, ctx: null, w: 0, h: 0,
+  lastTs: 0, raf: 0
+};
+
+function mgStatus(t) {
+  const el = document.getElementById('mg-status');
+  el.textContent = t;
+  el.classList.add('show');
+  clearTimeout(mgStatus._t);
+  mgStatus._t = setTimeout(function () { el.classList.remove('show'); }, 1100);
+}
+function mgMakeApi() {
+  return {
+    get elapsed() { return MiniGame.elapsed; },
+    get w() { return MiniGame.w; },
+    get h() { return MiniGame.h; },
+    addScore: function (n) { MiniGame.score = Math.max(0, MiniGame.score + n); },
+    penalty: function (s) { MiniGame.timeLeft = Math.max(0.01, MiniGame.timeLeft - s); },
+    status: mgStatus,
+    end: mgEnd
+  };
+}
+function mgResize() {
+  const wrap = document.getElementById('mg-wrap');
+  const rect = wrap.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  MiniGame.w = Math.max(1, Math.floor(rect.width));
+  MiniGame.h = Math.max(1, Math.floor(rect.height));
+  MiniGame.canvas.width = Math.floor(MiniGame.w * dpr);
+  MiniGame.canvas.height = Math.floor(MiniGame.h * dpr);
+  MiniGame.canvas.style.width = MiniGame.w + 'px';
+  MiniGame.canvas.style.height = MiniGame.h + 'px';
+  MiniGame.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+function mgStart(lm) {
+  const def = MG_DEFS[lm.def.id];
+  if (!def) return;
+
+  MiniGame.active = true;
+  MiniGame.ended = false;
+  MiniGame.lm = lm;
+  MiniGame.def = def;
+  MiniGame.elapsed = 0;
+  MiniGame.score = 0;
+  MiniGame.timeLeft = def.duration;
+  MiniGame.lastTs = 0;
+
+  document.getElementById('mg-title').textContent = lm.def.name + ' · ' + def.title;
+  document.getElementById('mg-timer').textContent = def.duration;
+  document.getElementById('mg-timer').classList.remove('low');
+  document.getElementById('mg-score').textContent = '0';
+  document.getElementById('mg-status').classList.remove('show');
+  document.getElementById('mg-result').classList.add('hidden');
+  document.getElementById('minigame').classList.remove('hidden');
+  Rain.setEnabled(false);
+
+  void document.getElementById('mg-wrap').offsetHeight;
+  MiniGame.canvas = document.getElementById('mg-canvas');
+  MiniGame.ctx = MiniGame.canvas.getContext('2d');
+  mgResize();
+  MiniGame.state = def.init(MiniGame.w, MiniGame.h);
+  MiniGame.api = mgMakeApi();
+  MiniGame.raf = requestAnimationFrame(mgLoop);
+  sfxGuide();
+}
+function mgLoop(ts) {
+  if (!MiniGame.active) return;
+  if (!MiniGame.lastTs) MiniGame.lastTs = ts;
+  let dt = (ts - MiniGame.lastTs) / 1000;
+  MiniGame.lastTs = ts;
+  if (dt > 0.06) dt = 0.06;
+
+  if (!MiniGame.ended) {
+    MiniGame.elapsed += dt;
+    MiniGame.timeLeft -= dt;
+    if (MiniGame.def.update) MiniGame.def.update(MiniGame.state, dt, MiniGame.api);
+    if (MiniGame.timeLeft <= 0) { MiniGame.timeLeft = 0; mgEnd(); }
+  }
+  mgDraw();
+  MiniGame.raf = requestAnimationFrame(mgLoop);
+}
+function mgDraw() {
+  const ctx = MiniGame.ctx, w = MiniGame.w, h = MiniGame.h;
+  const def = MiniGame.def;
+  if (!ctx) return;
+
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  const colors = def.bg || ['#1a2640', '#2a3a5a'];
+  g.addColorStop(0, colors[0]); g.addColorStop(1, colors[1]);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+
+  if (def.draw) def.draw(MiniGame.state, ctx, w, h);
+
+  const timerEl = document.getElementById('mg-timer');
+  const tVal = Math.ceil(MiniGame.timeLeft);
+  if (timerEl.textContent !== String(tVal)) timerEl.textContent = tVal;
+  timerEl.classList.toggle('low', MiniGame.timeLeft <= 5);
+
+  const sVal = String(Math.floor(MiniGame.score));
+  const scoreEl = document.getElementById('mg-score');
+  if (scoreEl.textContent !== sVal) scoreEl.textContent = sVal;
+}
+function mgEnd() {
+  if (MiniGame.ended) return;
+  MiniGame.ended = true;
+  const score = Math.floor(MiniGame.score);
+  const lm = MiniGame.lm;
+
+  const isFirst = save.completed.indexOf(lm.def.id) < 0;
+  const mult = isFirst ? 1 : 0.3;
+  const coin = Math.max(3, Math.floor(score / 8 * mult));
+  const fire = Math.max(1, Math.floor((score / 50 + 1) * mult));
+
+  save.coin += coin;
+  save.fire += fire;
+  if (isFirst) save.completed.push(lm.def.id);
+  persist();
+  updateHUD();
+  renderQuestList();
+  sfxDone();
+
+  document.getElementById('mg-result-title').textContent = isFirst ? '任務完成！' : '挑戰結束';
+  document.getElementById('mg-final-score').textContent = score;
+  document.getElementById('mg-reward').innerHTML = '+' + coin + ' 🪙　+' + fire + ' 🔥';
+  document.getElementById('mg-result-note').textContent = isFirst ? '首次完成，獎勵全額。' : '重玩獎勵為首次的 30%。';
+  document.getElementById('mg-result').classList.remove('hidden');
+}
+function mgRestart() {
+  if (!MiniGame.lm) return;
+  cancelAnimationFrame(MiniGame.raf);
+  MiniGame.ended = false;
+  MiniGame.elapsed = 0;
+  MiniGame.score = 0;
+  MiniGame.timeLeft = MiniGame.def.duration;
+  MiniGame.lastTs = 0;
+  MiniGame.state = MiniGame.def.init(MiniGame.w, MiniGame.h);
+  document.getElementById('mg-timer').textContent = MiniGame.def.duration;
+  document.getElementById('mg-timer').classList.remove('low');
+  document.getElementById('mg-score').textContent = '0';
+  document.getElementById('mg-result').classList.add('hidden');
+  document.getElementById('mg-status').classList.remove('show');
+  MiniGame.raf = requestAnimationFrame(mgLoop);
+}
+function mgClose() {
+  MiniGame.active = false;
+  MiniGame.ended = false;
+  cancelAnimationFrame(MiniGame.raf);
+  document.getElementById('minigame').classList.add('hidden');
+  document.getElementById('mg-result').classList.add('hidden');
+  if (save.rain) Rain.setEnabled(true);
+  checkAllDone();
+}
+function bindMinigameEvents() {
+  const canvas = document.getElementById('mg-canvas');
+  canvas.addEventListener('pointerdown', function (e) {
+    if (!MiniGame.active || MiniGame.ended) return;
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    if (MiniGame.def.tap) MiniGame.def.tap(MiniGame.state, x, y, MiniGame.api);
+  });
+  document.getElementById('mg-btn-replay').addEventListener('click', function () { mgRestart(); });
+  document.getElementById('mg-btn-close').addEventListener('click', function () { mgClose(); });
+}
+
+/* =========================================================================
+   21. UI 事件
+   ========================================================================= */
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._tid);
+  showToast._tid = setTimeout(function () { t.classList.remove('show'); }, 1900);
+}
+
+function bindUI() {
+  document.getElementById('btn-avatar').addEventListener('click', function () {
+    document.getElementById('help-panel').classList.remove('hidden');
+  });
+
+  document.getElementById('btn-quest').addEventListener('click', function () {
+    renderQuestList();
+    document.getElementById('quest-panel').classList.remove('hidden');
+  });
+
+  document.querySelectorAll('[data-close]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const id = b.getAttribute('data-close');
+      document.getElementById(id).classList.add('hidden');
+      if (id === 'quest-panel') { guideSelectMode = false; renderQuestList(); }
+    });
+  });
+
+  document.getElementById('btn-guide-start').addEventListener('click', function () {
+    if (guide.active) { endGuide(false); return; }
+    if (save.fire < 5) { showToast('🔥 不足，需要 5 個才能請' + GUIDE_NAME + '帶路'); return; }
+    guideSelectMode = !guideSelectMode;
+    renderQuestList();
+  });
+
+  document.getElementById('btn-open-progress').addEventListener('click', function () {
+    document.getElementById('quest-panel').classList.add('hidden');
+    guideSelectMode = false;
+    openProgressPanel();
+  });
+
+  const nickInput = document.getElementById('nickname-input');
+  nickInput.addEventListener('input', function () {
+    save.nickname = nickInput.value.trim().slice(0, 20) || '旅行者';
+    persist();
+    drawProgressCard();
+  });
+
+  document.getElementById('btn-download-progress').addEventListener('click', function () {
+    drawProgressCard();
+    downloadCanvas(document.getElementById('progress-canvas'), 'douqi-planet-progress.png');
+    showToast('進度圖已下載');
+  });
+
+  document.getElementById('btn-download-postcard').addEventListener('click', function () {
+    const off = document.createElement('canvas');
+    off.width = 720; off.height = 900;
+    drawPostcardOn(off);
+    downloadCanvas(off, 'douqi-planet-postcard.png');
+    showToast('明信片已下載');
+  });
+
+  document.getElementById('btn-download-card').addEventListener('click', function () {
+    drawPostcardOn(document.getElementById('postcard-canvas'));
+    downloadCanvas(document.getElementById('postcard-canvas'), 'douqi-planet-postcard.png');
+    showToast('明信片已下載');
+  });
+
+  /* 匯出存檔 */
+  document.getElementById('btn-export-save').addEventListener('click', function () {
+    exportSaveJSON();
+  });
+
+  /* 匯入存檔 */
+  const importFile = document.getElementById('import-file');
+  document.getElementById('btn-import-save').addEventListener('click', function () {
+    if (MiniGame.active) { showToast('請先離開小遊戲再匯入'); return; }
+    if (!window.confirm('匯入會完全覆蓋目前進度，建議先匯出備份。確定要繼續嗎？')) return;
+    importFile.value = '';
+    importFile.click();
+  });
+  importFile.addEventListener('change', function () {
+    if (importFile.files && importFile.files[0]) importSaveJSON(importFile.files[0]);
+  });
+
+  document.getElementById('guide-cancel').addEventListener('click', function () { endGuide(false); });
+
+  document.getElementById('btn-daynight').addEventListener('click', function () {
+    initAudio();
+    toggleDayNight();
+  });
+
+  const btnWeather = document.getElementById('btn-weather');
+  function refreshWeatherBtn() {
+    btnWeather.textContent = save.rain ? '🌧️' : '🌤️';
+    btnWeather.classList.toggle('off', !save.rain);
+  }
+  refreshWeatherBtn();
+  btnWeather.addEventListener('click', function () {
+    save.rain = !save.rain;
+    persist();
+    refreshWeatherBtn();
+    Rain.setEnabled(save.rain);
+    if (save.rain) { initAudio(); playTone(320, 0.28, 'triangle', 0.07); }
+    showToast(save.rain ? '開始下雨' : '雨停了');
+  });
+
+  const btnMusic = document.getElementById('btn-music');
+  btnMusic.textContent = save.sound ? '🔊' : '🔇';
+  btnMusic.addEventListener('click', function () {
+    save.sound = !save.sound;
+    btnMusic.textContent = save.sound ? '🔊' : '🔇';
+    btnMusic.classList.toggle('off', !save.sound);
+    persist();
+    if (save.sound) { initAudio(); playTone(880, 0.1, 'sine', 0.1); }
+  });
+  btnMusic.classList.toggle('off', !save.sound);
+
+  document.getElementById('btn-photo').addEventListener('click', function () { photoRequested = true; });
+
+  document.getElementById('btn-interact').addEventListener('click', function () {
+    if (nearLandmark) openDialog(nearLandmark);
+  });
+
+  window.addEventListener('keydown', function (e) {
+    const k = e.key.toLowerCase();
+    keys[k] = true;
+    if (k === ' ') { e.preventDefault(); tryJump(); }
+  });
+  window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
+
+  const jumpBtn = document.getElementById('btn-jump');
+  jumpBtn.addEventListener('pointerdown', function (e) {
+    e.preventDefault(); initAudio(); tryJump();
+  });
+
+  const joystick = document.getElementById('joystick');
+  const knob = document.getElementById('joystick-knob');
+  let joyPointerId = null;
+
+  function updateJoy(e) {
+    const rect = joystick.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    let dx = e.clientX - cx;
+    let dy = e.clientY - cy;
+    const maxR = rect.width / 2;
+    const len = Math.hypot(dx, dy);
+    if (len > maxR) { dx = dx / len * maxR; dy = dy / len * maxR; }
+    joyVec.x = dx / maxR;
+    joyVec.y = dy / maxR;
+    knob.style.transform = 'translate(calc(-50% + ' + dx + 'px), calc(-50% + ' + dy + 'px))';
+  }
+
+  joystick.addEventListener('pointerdown', function (e) {
+    e.preventDefault(); initAudio();
+    joyPointerId = e.pointerId;
+    joystick.setPointerCapture(e.pointerId);
+    updateJoy(e);
+  });
+  joystick.addEventListener('pointermove', function (e) {
+    if (e.pointerId !== joyPointerId) return;
+    updateJoy(e);
+  });
+  function endJoy(e) {
+    if (e.pointerId !== joyPointerId) return;
+    joyPointerId = null;
+    joyVec.x = 0; joyVec.y = 0;
+    knob.style.transform = 'translate(-50%, -50%)';
+  }
+  joystick.addEventListener('pointerup', endJoy);
+  joystick.addEventListener('pointercancel', endJoy);
+
+  window.addEventListener('pointerdown', initAudio, { once: true });
+
+  window.addEventListener('resize', function () {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    if (MiniGame.active) mgResize();
+  });
+}
+
+function tryJump() {
+  if (player.onGround) {
+    player.jumpVel = 30;
+    player.onGround = false;
+    sfxJump();
+  }
+}
+
+/* =========================================================================
+   22. 拍照
+   ========================================================================= */
+function takePhotoNow() {
+  try {
+    const url = renderer.domElement.toDataURL('image/png');
+    downloadDataURL(url, 'douqi-planet-' + Date.now() + '.png');
+    showToast('照片已儲存');
+  } catch (e) {
+    showToast('此裝置不支援拍照下載');
+  }
+}
+
+/* =========================================================================
+   23. 主循環
+   ========================================================================= */
+let lastTime = 0;
+function animate(now) {
+  requestAnimationFrame(animate);
+  if (!lastTime) lastTime = now;
+  let dt = (now - lastTime) / 1000;
+  lastTime = now;
+  if (dt > 0.05) dt = 0.05;
+
+  if (!MiniGame.active) {
+    update(dt);
+    updateCamera(dt);
+  }
+  Rain.update(dt);
+  renderer.render(scene, camera);
+
+  if (photoRequested) {
+    photoRequested = false;
+    takePhotoNow();
+  }
+}
+
+/* =========================================================================
+   24. 啟動
+   ========================================================================= */
+function boot() {
+  loadSave();
+  Rain.init();
+
+  initScene();
+  bindUI();
+  bindMinigameEvents();
+
+  updateHUD();
+  renderQuestList();
+  updateGuideBanner();
+
+  Rain.setEnabled(!!save.rain);
+  document.getElementById('btn-weather').textContent = save.rain ? '🌧️' : '🌤️';
+  document.getElementById('btn-weather').classList.toggle('off', !save.rain);
+  document.getElementById('btn-music').textContent = save.sound ? '🔊' : '🔇';
+  document.getElementById('btn-music').classList.toggle('off', !save.sound);
+
+  const n0 = player.pos.clone().normalize();
+  camera.position.copy(player.pos.clone().addScaledVector(n0, 17).addScaledVector(player.forward, -30));
+  camera.up.copy(n0);
+
+  requestAnimationFrame(animate);
+
+  const loader = document.getElementById('loader');
+  loader.classList.add('hide');
+  setTimeout(function () { loader.style.display = 'none'; }, 520);
+
+  if (save.completed.length > 0) {
+    showToast('歡迎回來，已完成 ' + save.completed.length + '/5 個地標');
+  } else {
+    showToast('用搖桿或 WASD 開始探索吧');
+  }
+}
+
+window.addEventListener('load', boot);
+
+})();
+</script>
+</body>
+</html>
